@@ -2475,7 +2475,7 @@ ora_result_t pio_reprogram_ram_rom_slot(
 
     // Get the SRAM address and size of the target slot
     uint32_t addr, size;
-    ora_result_t result = ora_get_ram_slot_info(slot, &addr, &size);
+    ora_result_t result = ora_get_ram_slot_info(slot, &addr, &size, NULL);
     if (result != ORA_RESULT_OK) {
         return result;
     }
@@ -2512,8 +2512,8 @@ ora_result_t pio_start_address_monitor(void) {
     return ORA_RESULT_OK;
 }
 
-volatile uint32_t **pio_get_address_monitor_ring_write_pos(void) {
-    return (volatile uint32_t **)&DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
+volatile uint32_t * volatile *pio_get_address_monitor_ring_write_pos(void) {
+    return (volatile uint32_t * volatile *)&DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
 }
 
 uint8_t pio_get_effective_addr_pins(void) {

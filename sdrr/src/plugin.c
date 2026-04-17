@@ -263,7 +263,7 @@ ora_result_t ora_start_address_monitor(void) {
     return pio_start_address_monitor();
 }
 
-volatile uint32_t **ora_get_address_monitor_ring_write_pos(void) {
+volatile uint32_t * volatile *ora_get_address_monitor_ring_write_pos(void) {
     return pio_get_address_monitor_ring_write_pos();
 }
 
@@ -281,18 +281,29 @@ uint8_t ora_get_ram_slot_count(void) {
     return 1;
 }
 
-ora_result_t ora_get_ram_slot_info(uint8_t ram_slot, uint32_t *addr_out, uint32_t *size_out) {
-    if (addr_out == NULL || size_out == NULL) {
-        return ORA_RESULT_INVALID_ARG;
-    }
+ora_result_t ora_get_ram_slot_info(
+    uint8_t   ram_slot,
+    uint32_t *addr_out,
+    uint32_t *size_out,
+    uint32_t *rom_type_out
+) {
     if (ram_slot >= ora_get_ram_slot_count()) {
         return ORA_RESULT_INVALID_SLOT;
     }
 
     uint32_t region_size = pio_get_rom_region_size();
 
-    *addr_out = SRAM_BASE + (ram_slot * region_size);
-    *size_out = region_size;
+    if (addr_out != NULL) {
+        *addr_out = SRAM_BASE + (ram_slot * region_size);
+    }
+    if (size_out != NULL) {
+        *size_out = region_size;
+    }
+    if (rom_type_out != NULL) {
+        uint8_t idx = sdrr_runtime_info.rom_set_index;
+        *rom_type_out =
+            (uint32_t)sdrr_info.metadata_header->rom_sets[idx].roms[0]->rom_type;
+    }
 
     return ORA_RESULT_OK;
 }
@@ -327,7 +338,7 @@ ora_result_t ora_get_active_ram_slot(uint8_t *ram_slot_out) {
 
 ora_result_t ora_set_active_ram_slot(uint8_t ram_slot) {
     uint32_t addr, size;
-    ora_result_t result = ora_get_ram_slot_info(ram_slot, &addr, &size);
+    ora_result_t result = ora_get_ram_slot_info(ram_slot, &addr, &size, NULL);
     if (result != ORA_RESULT_OK) {
         return result;
     }
@@ -430,7 +441,7 @@ ora_result_t ora_copy_flash_slot_to_ram_slot(
 
     // Get the target RAM slot address and size
     uint32_t addr, size;
-    ora_result_t result = ora_get_ram_slot_info(ram_slot, &addr, &size);
+    ora_result_t result = ora_get_ram_slot_info(ram_slot, &addr, &size, NULL);
     if (result != ORA_RESULT_OK) {
         return result;
     }

@@ -1162,24 +1162,34 @@ typedef volatile uint32_t * volatile *(*ora_get_address_monitor_ring_write_pos_f
 typedef uint8_t (*ora_get_ram_slot_count_fn_t)(void);
 
 /**
- * @brief Get the SRAM address and size of a RAM slot
+ * @brief Get information about a RAM slot
  * @sa ORA_ID_GET_RAM_SLOT_INFO
  *
- * Returns the absolute SRAM address and size in bytes of the specified RAM
- * slot. This is provided for plugins that need direct access to the slot's
- * backing memory. Most plugins should use @ref ora_reprogram_ram_slot_fn_t
- * instead.
+ * Returns the absolute SRAM address, size, and ROM type of the specified RAM
+ * slot. All output parameters are optional (nullable); pass NULL for any
+ * value not required.
  *
- * @param ram_slot   Index of the RAM slot to query
- * @param addr_out   Output pointer to receive the SRAM address of the slot
- * @param size_out   Output pointer to receive the size of the slot in bytes
+ * The ROM type reflects the last ROM image loaded into the slot via
+ * @ref ora_copy_flash_slot_to_ram_slot_fn_t.  For slot 0, which is
+ * pre-populated by the firmware at boot, the type is derived from the first
+ * non-plugin flash slot.  Slots that have never been explicitly loaded report
+ * 0xFF (invalid).
+ *
+ * @param ram_slot      Index of the RAM slot to query
+ * @param addr_out      Output pointer to receive the SRAM address of the slot.
+ *                      May be NULL if not required.
+ * @param size_out      Output pointer to receive the size of the slot in bytes.
+ *                      May be NULL if not required.
+ * @param rom_type_out  Output pointer to receive the ROM type loaded into the
+ *                      slot, or 0xFF if not known.  May be NULL if not required.
  * @return ORA_RESULT_OK on success, ORA_RESULT_INVALID_SLOT if ram_slot is
- *         out of range, ORA_RESULT_INVALID_ARG if any pointer is NULL
+ *         out of range
  */
 typedef ora_result_t (*ora_get_ram_slot_info_fn_t)(
-    uint8_t ram_slot,
+    uint8_t   ram_slot,
     uint32_t *addr_out,
-    uint32_t *size_out
+    uint32_t *size_out,
+    uint32_t *rom_type_out
 );
 
 /**

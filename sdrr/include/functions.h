@@ -133,7 +133,7 @@ ora_result_t pio_reprogram_ram_rom_slot(
     uint8_t allow_active
 );
 ora_result_t pio_start_address_monitor(void);
-volatile uint32_t **pio_get_address_monitor_ring_write_pos(void);
+volatile uint32_t * volatile *pio_get_address_monitor_ring_write_pos(void);
 ora_result_t pio_get_new_rom_ram_region(uint32_t *addr_out, uint32_t *size_out);
 uint8_t pio_get_effective_addr_pins(void);
 uint32_t pio_get_rom_region_size(void);
@@ -148,7 +148,7 @@ extern uint8_t check_plugin_valid(
 extern void ora_launch_plugins(const sdrr_info_t *info);
 extern void irq_handler_timer0_irq_0(void);
 extern void irq_handler_usbctrl_irq(void);
-ora_result_t ora_get_ram_slot_info(uint8_t ram_slot, uint32_t *addr_out, uint32_t *size_out);
+ora_result_t ora_get_ram_slot_info(uint8_t ram_slot, uint32_t *addr_out, uint32_t *size_out, uint32_t *rom_type_out);
 ora_result_t ora_get_active_ram_slot(uint8_t *ram_slot_out);
 #endif // RP235X
 
