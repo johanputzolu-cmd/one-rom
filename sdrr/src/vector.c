@@ -213,13 +213,23 @@ void NMI_Handler(void) {
 }
 
 // HardFault_Handler - double blink pattern
-void HardFault_Handler(void) {
+void HardFault_C(void) {
     setup_status_led();
     
     while(1) {
         blink_pattern(100000, 200000, 2); // Double blink
         delay(1000000); // Long pause
     }
+}
+
+void __attribute__((naked)) HardFault_Handler(void) {
+    __asm volatile (
+        "tst   lr, #4\n"
+        "ite   eq\n"
+        "mrseq r0, msp\n"
+        "mrsne r0, psp\n"
+        "b     HardFault_C\n"
+    );
 }
 
 // BusFault_Handler - triple blink pattern

@@ -2395,8 +2395,19 @@ ora_result_t pio_wait_for_knock(
     uint8_t ring_entries_log2,
     uint32_t flags,
     uint32_t *payload_out,
-    uint8_t payload_len
+    uint8_t payload_len,
+    volatile uint32_t *start_pos,
+    volatile uint32_t **next_read_out
 ) {
+    // Discard any captures that occurred before we were called.  Do this first
+    // to avoid missing bytes, even before testing for a start_pos.
+    volatile uint32_t *read_ptr = (volatile uint32_t *)DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
+    if (start_pos != NULL) {
+        // We have a start_pos so use that instead.
+        read_ptr = start_pos;
+    }
+
+    // Next check the args
     if (knock == NULL || ring_buf == NULL) {
         return ORA_RESULT_INVALID_ARG;
     }
@@ -2416,26 +2427,35 @@ ora_result_t pio_wait_for_knock(
         }
     }
 
-    // Discard any captures that occurred before we were called
-    volatile uint32_t *read_ptr = (volatile uint32_t *)DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
-
     // Detection loop
     uint8_t knock_pos = 0;
     while (knock_pos < knock->len) {
         volatile uint32_t *write_ptr = (volatile uint32_t *)DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
         while (read_ptr != write_ptr) {
+            // Still bytes to read
             uint32_t entry = *read_ptr;
             if (++read_ptr >= ring_buf + ring_entries) {
+                // Wrap read pointer if we reach the end of the ring buffer
                 read_ptr = ring_buf;
             }
 
             if (cs_mask && (entry & cs_mask)) {
+                // Skip as CS wasn't active - this is part of debounce handling
                 continue;
             }
 
             if ((entry & knock->mask) == knock->matches[knock_pos]) {
+                // This entry matches the current knock position - advance to
+                // look for the next one
                 knock_pos++;
+                if (knock_pos >= knock->len) {
+                    // Full sequence matched - break out to collect payload
+                    break;
+                }
             } else {
+                // No match - if this was a potential match for the first
+                // knock position, stay at that position, otherwise reset to
+                // start looking for the sequence from the beginning
                 knock_pos = ((entry & knock->mask) == knock->matches[0]) ? 1 : 0;
             }
         }
@@ -2459,6 +2479,9 @@ ora_result_t pio_wait_for_knock(
         }
     }
 
+    if (next_read_out != NULL) {
+        *next_read_out = read_ptr;
+    }
     return ORA_RESULT_OK;
 }
 

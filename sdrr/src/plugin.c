@@ -9,6 +9,7 @@
 #if defined(RP235X)
 
 #include "plugin.h"
+#include <stdio.h>
 
 #if !defined(TEST_BUILD)
 
@@ -237,7 +238,9 @@ ora_result_t ora_wait_for_knock(
     uint8_t ring_entries_log2,
     uint32_t flags,
     uint32_t *payload_out,
-    uint8_t payload_len
+    uint8_t payload_len,
+    volatile uint32_t *start_pos,
+    volatile uint32_t **next_read_out
 ) {
     return pio_wait_for_knock(
         knock,
@@ -245,7 +248,9 @@ ora_result_t ora_wait_for_knock(
         ring_entries_log2,
         flags, 
         payload_out,
-        payload_len
+        payload_len,
+        start_pos,
+        next_read_out
     );
 }
 
@@ -458,6 +463,14 @@ ora_result_t ora_copy_flash_slot_to_ram_slot(
     return ORA_RESULT_OK;
 }
 
+ora_result_t ora_get_device_version(uint8_t *version_out, uint32_t max_len) {
+    if (max_len < version_str_len) {
+        return ORA_RESULT_INVALID_SIZE;
+    }
+    memcpy(version_out, version_str, version_str_len);
+    return ORA_RESULT_OK;
+}
+
 void *ora_fn_lookup(api_id_t id) {
     switch (id) {
         case ORA_ID_REBOOT_BOOTSEL:
@@ -534,6 +547,8 @@ void *ora_fn_lookup(api_id_t id) {
             return ora_get_flash_slot_ext_info;
         case ORA_ID_COPY_FLASH_SLOT_TO_RAM_SLOT:
             return ora_copy_flash_slot_to_ram_slot;
+        case ORA_ID_GET_DEVICE_VERSION:
+            return ora_get_device_version;
         default:
             return NULL;
     }

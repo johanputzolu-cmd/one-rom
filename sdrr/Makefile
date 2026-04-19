@@ -86,7 +86,10 @@ CFLAGS := $(EXTRA_C_FLAGS) $(COMMON_FLAGS) $(SEGGER_RTT_FLAGS) -Werror \
           -I include -I $(OUTPUT_DIR) -I segger-rtt/RTT -I segger-rtt/Config \
 		  -I apio/include -I epio/include -I ora \
 		  -g -nostdlib -O3 -ffunction-sections -fomit-frame-pointer -fdata-sections \
-		  -Wall -Wextra -MMD -MP
+		  -Wall -Wextra -MMD -MP \
+		  -DSDRR_VERSION_MAJOR=$(VERSION_MAJOR) -DSDRR_VERSION_MINOR=$(VERSION_MINOR) \
+		  -DSDRR_VERSION_PATCH=$(VERSION_PATCH) -DSDRR_BUILD_NUMBER=$(BUILD_NUMBER) \
+		  -DSDRR_GIT_COMMIT=\"$(GIT_COMMIT)\" 
 LDFLAGS := $(COMMON_FLAGS) -Werror -Llink -L$(OUTPUT_DIR) -nostdlib -specs=nosys.specs -specs=nano.specs -Wl,--no-gc-sections -Wl,--fatal-warnings -Wl,-Map=$(MAP)
 
 # Phony targets
@@ -130,7 +133,7 @@ $(ROMS_OBJ): $(ROMS_SRC) ../Makefile
 # sdrr_config.o is built from sdrr_config.c from a different directory
 $(SDRR_CONFIG_OBJ): $(SDRR_CONFIG_SRC) ../Makefile 
 	@echo "- Compiling sdrr/$<"
-	@$(CC) $(CFLAGS) -DSDRR_VERSION_MAJOR=$(VERSION_MAJOR) -DSDRR_VERSION_MINOR=$(VERSION_MINOR) -DSDRR_VERSION_PATCH=$(VERSION_PATCH) -DSDRR_BUILD_NUMBER=$(BUILD_NUMBER) -DSDRR_GIT_COMMIT=\"$(GIT_COMMIT)\" -c $< -o $@
+	@$(CC) $(CFLAGS)-c $< -o $@
 
 # Explicit rules for SEGGER files
 $(BUILD_DIR)/SEGGER_RTT.o: segger-rtt/RTT/SEGGER_RTT.c ../Makefile  | $(BUILD_DIR)

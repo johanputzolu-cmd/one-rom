@@ -259,6 +259,12 @@ typedef enum {
      */
     ORA_ID_COPY_FLASH_SLOT_TO_RAM_SLOT = 0x00000024,
 
+    /**
+     * @brief Get the device version string
+     * @sa ora_get_device_version_fn_t
+     */
+    ORA_ID_GET_DEVICE_VERSION = 0x00000025,
+
     /** Invalid API identifier */
     ORA_ID_INVALID = 0xFFFFFFFF,
 } api_id_t;
@@ -1059,6 +1065,14 @@ typedef ora_result_t (*ora_init_knock_fn_t)(
  * @param payload_len        Number of address captures to collect after the
  *                           knock sequence is detected. Pass 0 to return
  *                           immediately after detection
+ * @param start_pos          Optional pointer to receive the initial read
+ *                           position in the ring buffer at the time the function
+ *                           starts waiting.  Avoids missing bytes if provided.
+ * @param next_read_out      Optional output pointer to receive the next read
+ *                           position in the ring buffer after the knock sequence
+ *                           and payload captures have been consumed. This can be
+ *                           used to update the read pointer to capture subsequent
+ *                           data without losing some.
  * @return ORA_RESULT_OK on success, ORA_RESULT_INVALID_ARG if @p knock or
  *         @p ring_buf is NULL, or @p payload_out is NULL when @p payload_len
  *         is non-zero
@@ -1069,7 +1083,9 @@ typedef ora_result_t (*ora_wait_for_knock_fn_t)(
     uint8_t ring_entries_log2,
     uint32_t flags,
     uint32_t *payload_out,
-    uint8_t payload_len
+    uint8_t payload_len,
+    volatile uint32_t *start_pos,
+    volatile uint32_t **next_read_out
 );
 
 /**
@@ -1348,6 +1364,18 @@ typedef ora_result_t (*ora_copy_flash_slot_to_ram_slot_fn_t)(
     uint8_t ram_slot,
     uint32_t copy_flags
 );
+
+/**
+ * @brief Populates a string with the device's version information
+ * @sa ORA_ID_GET_DEVICE_VERSION
+ *
+ * @param version_out  Output pointer to a buffer to receive the device's
+ *                     version string. May be NULL if not required.
+ * @param max_len      The maximum length of the version string, including the
+ *                     null terminator.
+ * @return ORA_RESULT_OK on success, ORA_RESULT_ERROR on failure
+ */
+typedef ora_result_t (*ora_get_device_version_fn_t)(uint8_t *version_out, uint32_t max_len);
 
 /** @} */ // plugin_api_functions
 

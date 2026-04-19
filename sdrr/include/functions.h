@@ -123,7 +123,9 @@ ora_result_t pio_wait_for_knock(
     uint8_t ring_entries_log2,
     uint32_t flags,
     uint32_t *payload_out,
-    uint8_t payload_len
+    uint8_t payload_len,
+    volatile uint32_t *start_pos,
+    volatile uint32_t **next_read_out
 );
 ora_result_t pio_reprogram_ram_rom_slot(
     uint8_t slot,

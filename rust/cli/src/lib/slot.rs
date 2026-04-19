@@ -76,6 +76,7 @@ fn expand_tilde(path: &str) -> std::borrow::Cow<'_, str> {
 /// Parsed and validated slot specification from a `--slot` argument.
 pub struct SlotSpec {
     pub file: Option<String>,
+    pub label: Option<String>,
     pub chip_type: ChipType,
     pub cs1: Option<CsLogic>,
     pub cs2: Option<CsLogic>,
@@ -211,6 +212,7 @@ fn parse_vreg(slot: &str, key: &str, value: &str) -> Result<FireVreg, Error> {
 
 const SLOT_KEYS: &[&str] = &[
     "file",
+    "label",
     "type",
     "cs1",
     "cs2",
@@ -226,6 +228,7 @@ const SLOT_KEYS: &[&str] = &[
 /// Parse a single `--slot` string into a [`SlotSpec`], validating against the given board.
 fn parse_slot(slot: &str, board: &Board) -> Result<SlotSpec, Error> {
     let mut file = None;
+    let mut label = None;
     let mut chip_type_str = None;
     let mut cs1 = None;
     let mut cs2 = None;
@@ -253,6 +256,7 @@ fn parse_slot(slot: &str, board: &Board) -> Result<SlotSpec, Error> {
         }
         match key {
             "file" | "path" | "url" => file = Some(expand_tilde(value).into_owned()),
+            "label" | "name" => label = Some(value.to_string()),
             "type" | "rom-type" | "rom_type" | "chip_type" | "chip-type" => {
                 chip_type_str = Some(value.to_string())
             }
@@ -322,6 +326,7 @@ fn parse_slot(slot: &str, board: &Board) -> Result<SlotSpec, Error> {
 
     Ok(SlotSpec {
         file,
+        label,
         chip_type,
         cs1,
         cs2,
@@ -423,7 +428,7 @@ fn slot_to_chip_config(slot: &SlotSpec) -> ChipConfig {
         cs3: slot.cs3,
         size_handling: slot.size_handling.clone().unwrap_or_default(),
         extract: None,
-        label: None,
+        label: slot.label.clone(),
         location: None,
     }
 }

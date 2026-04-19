@@ -67,3 +67,11 @@ const uint32_t chip_size_from_type[NUM_CHIP_TYPES] = {
     32768,  // CHIP_TYPE_28C256
     65536,  // CHIP_TYPE_28C512
 };
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define SDRR_VERSION_STRING \
+    "v" TOSTRING(SDRR_VERSION_MAJOR) \
+    "." TOSTRING(SDRR_VERSION_MINOR) \
+    "." TOSTRING(SDRR_VERSION_PATCH)
+const char version_str[] = SDRR_VERSION_STRING;
+const uint32_t version_str_len = sizeof(SDRR_VERSION_STRING);
