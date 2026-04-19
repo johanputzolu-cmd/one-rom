@@ -50,6 +50,16 @@ static const uint32_t s_knock_seq[KNOCK_LEN] = {
 // Protocol constants
 // ---------------------------------------------------------------------------
 
+#define RBCP_PROTOCOL_VERSION_MAJOR 0u
+#define RBCP_PROTOCOL_VERSION_MINOR 1u
+#define RBCP_PROTOCOL_VERSION_PATCH 0u
+const uint8_t protocol_version[4] = {
+    RBCP_PROTOCOL_VERSION_MAJOR,
+    RBCP_PROTOCOL_VERSION_MINOR,
+    RBCP_PROTOCOL_VERSION_PATCH,
+    0u
+};
+
 #define RBCP_DEFAULT_COMPLETE   ((uint8_t)0xAAu)
 #define RBCP_DEFAULT_STATUS_OK  ((uint8_t)0xCCu)
 
@@ -86,6 +96,7 @@ static const uint32_t s_knock_seq[KNOCK_LEN] = {
 #define CMD_GET_RAM_SLOT_INFO_ALL       0x03u
 #define CMD_GET_DEVICE_TYPE             0x04u
 #define CMD_GET_DEVICE_VERSION          0x05u
+#define CMD_GET_PROTOCOL_VERSION        0x06u
 
 // Modify commands
 #define CMD_SLOT_POKE                   0x00u
@@ -559,6 +570,12 @@ static bool exec_get_device_version(void) {
     return true;
 }
 
+static bool exec_get_protocol_version(void) {
+    data_write(s_state.active_slot, 0u, protocol_version, sizeof(protocol_version));
+    s_log("GET_PROTOCOL_VERSION: protocol_version=%u.%u.%u", (unsigned)protocol_version[0], (unsigned)protocol_version[1], (unsigned)protocol_version[2]);
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Command handlers — Modify group (0x02)
 // ---------------------------------------------------------------------------
@@ -701,6 +718,9 @@ static bool dispatch(
                     break;
                 case CMD_GET_DEVICE_VERSION:
                     ok = exec_get_device_version();
+                    break;
+                case CMD_GET_PROTOCOL_VERSION:
+                    ok = exec_get_protocol_version();
                     break;
                 default:
                     ok = false;
