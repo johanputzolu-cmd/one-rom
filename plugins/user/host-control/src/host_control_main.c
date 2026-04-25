@@ -425,6 +425,27 @@ static bool exec_config_cmd_resp(void) {
         return false;
     }
 
+    uint8_t active_slot;
+    if (s_get_active_ram_slot(&active_slot) != ORA_RESULT_OK) {
+        s_log("CONFIG_CMD_RESP failed: no active slot");
+        return false;
+    }
+    uint32_t slot_size;
+    if (s_get_ram_slot_info(active_slot, NULL, &slot_size, NULL) != ORA_RESULT_OK) {
+        s_log("CONFIG_CMD_RESP failed: get_ram_slot_info error");
+        return false;
+    }
+    uint32_t offset;
+    if (compute_region_offset(location, size_id, active_slot, &offset) != ORA_RESULT_OK) {
+        s_log("CONFIG_CMD_RESP failed: invalid location");
+        return false;
+    }
+    uint32_t data_size = s_size_table[size_id];
+    if (offset + HDR_SIZE + data_size > slot_size) {
+        s_log("CONFIG_CMD_RESP failed: region exceeds slot size");
+        return false;
+    }
+
     s_state.cfg.location_id = location;
     s_state.cfg.size_id     = size_id;
     s_state.cfg.complete    = complete;
