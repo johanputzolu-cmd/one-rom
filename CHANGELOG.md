@@ -16,6 +16,11 @@ This version of the plugin and core firmware focuses on enabling RBCP for 2364 R
 
 In order to support this functionality, this release also includes a number of other changes, including substantial new plugin API functions.
 
+There are a few non-backwards compatible plugin API changes:
+- ORA_RING_BUF_DECLARE() has been removed and replaced with _8BIT(), _16BIT() and _32BIT() variants
+- setup_address_monitor() and init_knock() have gained a data_size argument, which must be aligned with the ORA_RING_BUF_DECLARE variant used
+- wait_for_knock() has gained additional optional arguments to allow a plugin more control over the knock behaviour
+
 ## v0.6.8 - 2026-04-02
 
 - One ROM Fire - Add read support for 28C16 (24), 28C64 (28), 28C256 (28) and 28C512 (32) EEPROMs (#169).  These have all been live tested.

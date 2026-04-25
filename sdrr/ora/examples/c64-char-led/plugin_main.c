@@ -16,7 +16,7 @@
 // based on the PLUGIN_TYPE passed in on make.
 ORA_DEFINE_USER_PLUGIN(
     c64_char_led_main,
-    0, 1, 0, 0,     // Plugin version
+    0, 1, 1, 0,     // Plugin version
     0, 6, 9         // Minimum One ROM firmware version required
 );
 
@@ -24,7 +24,7 @@ ORA_DEFINE_USER_PLUGIN(
 // aligned to its size, and be a power of 2 in length.  The macro takes care
 // of the alignment and size requirements.
 #define RING_ENTRIES_LOG2   6   // 2^6 = 64 entries
-ORA_RING_BUF_DECLARE(ring_buf, RING_ENTRIES_LOG2);
+ORA_RING_BUF_DECLARE_32BIT(ring_buf, RING_ENTRIES_LOG2);
 #define RING_ENTRIES_NUM    (1u << RING_ENTRIES_LOG2)
 
 // Character values to monitor for.
@@ -54,7 +54,7 @@ void c64_char_led_main(
 
     // Initialize the PIO state machines and DMA channel to capture addresses
     // when CS is active.
-    if (setup_address_monitor(ring_buf, RING_ENTRIES_LOG2, ORA_MONITOR_MODE_OBSERVE, NULL) != ORA_RESULT_OK) {
+    if (setup_address_monitor(ring_buf, RING_ENTRIES_LOG2, ORA_MONITOR_MODE_OBSERVE, 32, NULL) != ORA_RESULT_OK) {
         log("Failed to set up address monitor");
         return;
     }

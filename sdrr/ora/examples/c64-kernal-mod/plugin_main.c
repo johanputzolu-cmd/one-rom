@@ -16,7 +16,7 @@
 // Plugin header.  Uses 0.6.9 firmware API functions.
 ORA_DEFINE_USER_PLUGIN(
     c64_kernal_mod_main,
-    0, 1, 0, 0,
+    0, 1, 1, 0,
     0, 6, 9
 );
 
@@ -24,7 +24,7 @@ ORA_DEFINE_USER_PLUGIN(
 // aligned to its size, and be a power of 2 in length.  The macro takes care
 // of the alignment and size requirements.
 #define RING_ENTRIES_LOG2   6   // 2^6 = 64 entries
-ORA_RING_BUF_DECLARE(ring_buf, RING_ENTRIES_LOG2);
+ORA_RING_BUF_DECLARE_32BIT(ring_buf, RING_ENTRIES_LOG2);
 
 // Knock sequence to detect: ONEROM! in ASCII
 #define KNOCK_LEN 7
@@ -66,7 +66,7 @@ void c64_kernal_mod_main(
 
     // Initialize the PIO state machines and DMA channel to capture addresses
     // when CS is active.
-    if (setup_address_monitor(ring_buf, RING_ENTRIES_LOG2, ORA_MONITOR_MODE_CONTROL, NULL) != ORA_RESULT_OK) {
+    if (setup_address_monitor(ring_buf, RING_ENTRIES_LOG2, ORA_MONITOR_MODE_CONTROL, 32, NULL) != ORA_RESULT_OK) {
         log("Failed to set up address monitor");
         return;
     }
@@ -74,7 +74,7 @@ void c64_kernal_mod_main(
     // Set up the knock sequence detection.  Done before time because detecting
     // the knock will happen at line speed.
     ORA_KNOCK_DECLARE(knock, KNOCK_LEN);
-    if (init_knock(knock_seq, KNOCK_LEN, 8, knock) != ORA_RESULT_OK) {
+    if (init_knock(knock_seq, KNOCK_LEN, 8, 32, knock) != ORA_RESULT_OK) {
         log("Failed to initialise knock sequence");
         return;
     }
@@ -90,7 +90,9 @@ void c64_kernal_mod_main(
         RING_ENTRIES_LOG2,
         ORA_WAIT_FOR_KNOCK_FLAG_DEBOUNCE_CS,
         &post_byte,
-        1
+        1,
+        NULL,
+        NULL
     ) != ORA_RESULT_OK) {
         log("Failed waiting for knock sequence");
         return;
