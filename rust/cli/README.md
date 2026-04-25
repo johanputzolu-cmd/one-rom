@@ -32,7 +32,7 @@ cargo build --release
     ```bash
     cd ../../../one-rom-images
     git add .
-    git commit -m "Update One ROM Studio releases"
+    git commit -m "Update One ROM CLI releases"
     git push
     ```
 
