@@ -1,6 +1,6 @@
 # CLI Changelog
 
-# [0.1.3] - 2026-??-??
+# [0.1.3] - 2026-04-25
 
 - Add support for labels/names for slots.
 
