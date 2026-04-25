@@ -52,6 +52,10 @@ pub struct Args {
     #[clap(long, requires = "swd")]
     boot_logging: bool,
 
+    /// Enable plugin logging
+    #[clap(long, requires = "swd")]
+    plugin_logging: bool,
+
     /// Enable main loop logging
     #[clap(long, requires = "boot_logging")]
     main_loop_logging: bool,
@@ -162,6 +166,11 @@ impl Args {
         self.boot_logging
     }
 
+    /// Returns whether plugin logging should be enabled
+    fn plugin_logging(&self) -> bool {
+        self.plugin_logging
+    }
+
     /// Returns whether main loop logging should be enabled
     fn main_loop_logging(&self) -> bool {
         self.main_loop_logging
@@ -270,6 +279,7 @@ impl Args {
             mco: self.mco(),
             mco2: self.mco2(),
             boot_logging: self.boot_logging(),
+            plugin_logging: self.plugin_logging(),
             main_loop_logging: self.main_loop_logging(),
             main_loop_one_shot: self.main_loop_one_shot(),
             debug_logging: self.debug_logging(),

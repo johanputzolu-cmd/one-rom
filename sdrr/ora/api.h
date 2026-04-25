@@ -265,6 +265,12 @@ typedef enum {
      */
     ORA_ID_GET_DEVICE_VERSION = 0x00000025,
 
+    /**
+     * @brief Demangle a captured physical data byte back to a logical byte
+     * @sa ora_demangle_data_fn_t
+     */
+    ORA_ID_DEMANGLE_DATA = 0x00000026,
+
     /** Invalid API identifier */
     ORA_ID_INVALID = 0xFFFFFFFF,
 } api_id_t;
@@ -338,7 +344,17 @@ typedef struct {
     /** @brief Number of low-order address bits used for matching */
     uint8_t bits;
 
-    uint8_t reserved[2];
+    /** @brief Number of bits to capture for each address */
+    uint8_t data_size;
+
+    /** @brief Multi-ROM mode flag */
+    uint8_t multi_rom_mode;
+
+    /** @brief Chip select mask to use for debouncing */
+    uint32_t cs_mask;
+
+    /** @brief X pin mask for multi-rom sets */
+    uint32_t x_mask;
 
     /**
      * @brief Precomputed match values, one per knock sequence entry.
@@ -346,6 +362,7 @@ typedef struct {
      * @ref ORA_KNOCK_SIZE.
      */
     uint32_t matches[];
+
 } ora_knock_t;
 
 /**
@@ -382,10 +399,26 @@ typedef struct {
 /**
  * @brief Calculate the size in bytes of a ring buffer for a given log2 entry count
  *
- * @param ring_entries_log2 Log2 of the number of entries in the ring buffer
+ * @param ring_entries_log2 Log2 of the number of 8-bit entries in the ring buffer
  */
-#define ORA_RING_BUF_SIZE(ring_entries_log2) \
-    ((1u << (ring_entries_log2)) * sizeof(uint32_t))
+#define ORA_RING_BUF_SIZE_8BIT(ring_entries_log2) \
+        ((1u << (ring_entries_log2)) * sizeof(uint8_t))
+
+        /**
+ * @brief Calculate the size in bytes of a ring buffer for a given log2 entry count
+ *
+ * @param ring_entries_log2 Log2 of the number of 16-bit entries in the ring buffer
+ */
+#define ORA_RING_BUF_SIZE_16BIT(ring_entries_log2) \
+        ((1u << (ring_entries_log2)) * sizeof(uint16_t))
+
+        /**
+ * @brief Calculate the size in bytes of a ring buffer for a given log2 entry count
+ *
+ * @param ring_entries_log2 Log2 of the number of 32-bit entries in the ring buffer
+ */
+#define ORA_RING_BUF_SIZE_32BIT(ring_entries_log2) \
+        ((1u << (ring_entries_log2)) * sizeof(uint32_t))
 
 /**
  * @brief Declare a correctly sized and aligned ring buffer
@@ -393,19 +426,30 @@ typedef struct {
  * Declares a static volatile uint32_t array of the correct size and alignment
  * for use with @ref ora_setup_address_monitor_fn_t. The buffer is placed in
  * static storage and must remain valid for the lifetime of the monitor.
+ * 
+ * Note that this is defined as a uint32_t array regardless of the data_size
+ * parameter, as the API expects this type.
  *
  * Example:
  * @code
- * ORA_RING_BUF_DECLARE(ring_buf, 6);  // 64 entry ring buffer
+ * ORA_RING_BUF_DECLARE_32BIT(ring_buf, 6);  // 64 entry uint32_t ring buffer
  * setup_address_monitor(ring_buf, 6, ORA_MONITOR_MODE_CONTROL, NULL);
  * @endcode
  *
  * @param name              Name for the ring buffer array
  * @param ring_entries_log2 Log2 of the number of entries, e.g. 6 for 64 entries
  */
-#define ORA_RING_BUF_DECLARE(name, ring_entries_log2)                        \
-    static volatile uint32_t __attribute__((aligned(                         \
-        ORA_RING_BUF_SIZE(ring_entries_log2)                                 \
+#define ORA_RING_BUF_DECLARE_8BIT(name, ring_entries_log2)  \
+    static volatile uint32_t __attribute__((aligned(        \
+        ORA_RING_BUF_SIZE_8BIT(ring_entries_log2)           \
+    ))) name[1u << (ring_entries_log2-2)]
+#define ORA_RING_BUF_DECLARE_16BIT(name, ring_entries_log2) \
+    static volatile uint32_t __attribute__((aligned(        \
+        ORA_RING_BUF_SIZE_16BIT(ring_entries_log2)          \
+    ))) name[1u << (ring_entries_log2-1)]
+#define ORA_RING_BUF_DECLARE_32BIT(name, ring_entries_log2) \
+    static volatile uint32_t __attribute__((aligned(        \
+        ORA_RING_BUF_SIZE_32BIT(ring_entries_log2)          \
     ))) name[1u << (ring_entries_log2)]
     
 /**
@@ -897,12 +941,15 @@ typedef uint8_t (*ora_get_data_pin_nums_fn_t)(uint8_t *data_pins_out, uint8_t nu
  * @param ring_entries_log2  Log2 of the number of entries in the ring buffer,
  *                        e.g. 6 for 64 entries
  * @param mode            The monitor mode to operate in
+ * @param data_size       Number of bits to capture for each address.  Must be
+ *                        8, 16 or 32.
  * @param reserved        Reserved for future use, must be NULL
  */
 typedef ora_result_t (*ora_setup_address_monitor_fn_t)(
     volatile uint32_t *ring_buf,
     uint8_t ring_entries_log2,
     ora_monitor_mode_t mode,
+    uint8_t data_size,
     void *reserved
 );
 
@@ -1012,6 +1059,8 @@ typedef ora_result_t (*ora_demangle_addr_fn_t)(
  * @param knock_bits  Number of low-order address bits to include in the mask.
  *                    Must not exceed the number of address pins configured for
  *                    the current hardware variant
+ * @param data_size   Number of bits the address monitor is configured to
+ *                    capture for each address.  Must be 8, 16 or 32.
  * @param knock       Pointer to a caller-allocated @ref ora_knock_t structure
  *                    to be filled in by this function. Must have been declared
  *                    with @ref ORA_KNOCK_DECLARE or allocated with
@@ -1024,6 +1073,7 @@ typedef ora_result_t (*ora_init_knock_fn_t)(
     const uint32_t *knock_seq,
     uint8_t knock_len,
     uint8_t knock_bits,
+    uint8_t data_size,
     ora_knock_t *knock
 );
 
@@ -1376,6 +1426,24 @@ typedef ora_result_t (*ora_copy_flash_slot_to_ram_slot_fn_t)(
  * @return ORA_RESULT_OK on success, ORA_RESULT_ERROR on failure
  */
 typedef ora_result_t (*ora_get_device_version_fn_t)(uint8_t *version_out, uint32_t max_len);
+
+/**
+ * @brief Demangle a captured physical data byte back to a logical byte
+ * @sa ORA_ID_DEMANGLE_DATA
+ *
+ * Converts a raw physical data byte as stored in SRAM back to the logical
+ * byte value it represents, based on the firmware's internal pin mapping for
+ * the current hardware variant. This is the inverse of
+ * @ref ora_map_data_to_phys_fn_t.
+ *
+ * @param physical_data     Raw physical data byte from SRAM
+ * @param logical_data_out  Output logical data byte
+ * @return ORA_RESULT_OK on success, ORA_RESULT_ERROR on failure
+ */
+typedef ora_result_t (*ora_demangle_data_fn_t)(
+    uint8_t  physical_data,
+    uint8_t *logical_data_out
+);
 
 /** @} */ // plugin_api_functions
 

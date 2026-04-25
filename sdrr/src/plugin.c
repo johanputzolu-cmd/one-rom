@@ -36,26 +36,26 @@ void *ora_get_runtime_info(void) {
 }
 
 void ora_log(const char* msg, ...) {
-#if defined(BOOT_LOGGING)
+#if defined(PLUGIN_LOGGING)
     va_list args;
     va_start(args, msg);
-    do_log_v(msg, args);
+    do_log_v(msg, &args);
     va_end(args);
 #else
     (void)msg;
-#endif // BOOT_LOGGING
+#endif // PLUGIN_LOGGING
 }
 
 void ora_err_log(const char* msg, ...) {
-#if defined(BOOT_LOGGING)
+#if defined(PLUGIN_LOGGING)
     do_err_log_prefix();
     va_list args;
     va_start(args, msg);
-    do_log_v(msg, args);
+    do_log_v(msg, &args);
     va_end(args);
 #else
     (void)msg;
-#endif // BOOT_LOGGING
+#endif // PLUGIN_LOGGING
 }
 
 void ora_debug_log(const char* msg, ...) {
@@ -202,9 +202,10 @@ ora_result_t ora_setup_address_monitor(
     volatile uint32_t *ring_buf,
     uint8_t ring_entries_log2,
     ora_monitor_mode_t mode,
+    uint8_t data_size,
     void *reserved
 ) {
-    return pio_setup_address_monitor(ring_buf, ring_entries_log2, mode, reserved);
+    return pio_setup_address_monitor(ring_buf, ring_entries_log2, mode, data_size, reserved);
 }
 
 uint32_t ora_map_addr_to_phys(uint32_t logical_addr) {
@@ -227,9 +228,10 @@ ora_result_t ora_init_knock(
     const uint32_t *knock_seq,
     uint8_t knock_len,
     uint8_t knock_bits,
+    uint8_t data_size,
     ora_knock_t *knock
 ) {
-    return pio_init_knock(knock_seq, knock_len, knock_bits, knock);
+    return pio_init_knock(knock_seq, knock_len, knock_bits, data_size, knock);
 }
 
 ora_result_t ora_wait_for_knock(
@@ -471,6 +473,14 @@ ora_result_t ora_get_device_version(uint8_t *version_out, uint32_t max_len) {
     return ORA_RESULT_OK;
 }
 
+ora_result_t ora_demangle_data(uint8_t physical_data, uint8_t *logical_data_out) {
+    if (logical_data_out == NULL) {
+        return ORA_RESULT_INVALID_ARG;
+    }
+    *logical_data_out = pio_demangle_data(physical_data);
+    return ORA_RESULT_OK;
+}
+
 void *ora_fn_lookup(api_id_t id) {
     switch (id) {
         case ORA_ID_REBOOT_BOOTSEL:
@@ -549,6 +559,8 @@ void *ora_fn_lookup(api_id_t id) {
             return ora_copy_flash_slot_to_ram_slot;
         case ORA_ID_GET_DEVICE_VERSION:
             return ora_get_device_version;
+        case ORA_ID_DEMANGLE_DATA:
+            return ora_demangle_data;
         default:
             return NULL;
     }

@@ -24,16 +24,16 @@ extern int firmware_main(void);
 
 // utils.c
 extern uint32_t check_sel_pins(uint32_t *sel_mask);
-#if defined(BOOT_LOGGING)
-extern void log_init();
-extern void log_roms(const onerom_metadata_header_t *metadata);
-extern void do_log_v(const char* msg, va_list args);
-extern void do_log(const char *, ...);
+extern void do_log_v(const char* msg, va_list *args);
 extern void do_err_log_prefix();
-extern void err_log(const char *, ...);
 #if defined(DEBUG_LOGGING)
 extern void do_debug_log_prefix();
 #endif // DEBUG_LOGGING
+#if defined(BOOT_LOGGING)
+extern void log_init();
+extern void log_roms(const onerom_metadata_header_t *metadata);
+extern void do_log(const char *, ...);
+extern void err_log(const char *, ...);
 #endif // BOOT_LOGGING
 #if defined(MAIN_LOOP_LOGGING) || defined(DEBUG_LOGGING)
 typedef void (*ram_log_fn)(const char*, ...);
@@ -102,6 +102,7 @@ extern ora_result_t pio_setup_address_monitor(
     volatile uint32_t *ring_buf,
     uint8_t ring_entries_log2,
     ora_monitor_mode_t mode,
+    uint8_t data_size,
     void *reserved
 );
 uint32_t pio_map_addr_to_phys(uint32_t logical_addr);
@@ -111,10 +112,12 @@ ora_result_t pio_demangle_addr(
     uint32_t *logical_addr_out,
     uint8_t check_control_pins
 );
+uint8_t pio_demangle_data(uint8_t physical_data);
 ora_result_t pio_init_knock(
     const uint32_t *knock_seq,
     uint8_t knock_len,
     uint8_t knock_bits,
+    uint8_t data_size,
     ora_knock_t *knock
 );
 ora_result_t pio_wait_for_knock(

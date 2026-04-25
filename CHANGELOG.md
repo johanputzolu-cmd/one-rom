@@ -4,13 +4,17 @@ All notables changes between versions are documented in this file.
 
 ## v0.6.9 - 2026-??-??
 
-xxx in progrress
+This release introduces support for the [ROM Bus Control Protocol](https://github.com/piersfinlayson/rom-bus-control-protocol) (RBCP), which allows retro systems to interact with and control One ROM directly.  This allows advanced functionality driven by the retro system, such as
 
-- Substantial new plugin API functions.
+- ROM based bootloaders (think `grub` for the C64)
+- Dynamic ROM patching for games, demos and other applications
+- Remote debugging of code running on real retro systems
 
-- More example plugins - C64 Kernal Mod and C64 Character Monitor.
+This support is implemented using the new `user/host-control` plugin, which is an implementation of v0.1.0 of the ROM Bus Control Protocol.
 
-- First draft of ROM Bus Control Protocol specification.
+This version of the plugin and core firmware focuses on enabling RBCP for 2364 ROMs, including 2364/2364/2332 multi-ROM sets, like those used in the C64 to serve all of basic, kernal and character ROMs from a single One ROM 24.  Support for other ROM types and configurations is expected in future releases.
+
+In order to support this functionality, this release also includes a number of other changes, including substantial new plugin API functions.
 
 ## v0.6.8 - 2026-04-02
 

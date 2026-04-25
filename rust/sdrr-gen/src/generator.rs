@@ -604,6 +604,18 @@ fn generate_sdrr_config_header(filename: &Path, config: &Config) -> Result<()> {
         writeln!(file, "// #define BOOT_LOGGING 0  // Boot logging disabled")?;
     }
 
+    // Plugin logging
+    writeln!(file)?;
+    writeln!(file, "// Plugin logging")?;
+    if config.plugin_logging {
+        writeln!(file, "#define PLUGIN_LOGGING 1")?;
+    } else {
+        writeln!(
+            file,
+            "// #define PLUGIN_LOGGING 0  // Plugin logging disabled"
+        )?;
+    }
+
     // Main loop logging
     writeln!(file)?;
     writeln!(file, "// Main loop logging")?;

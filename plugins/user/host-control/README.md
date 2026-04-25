@@ -4,9 +4,9 @@ One ROM's Host Control plugin is a full implementation of the [ROM Bus Control P
 
 This allows a host system to query and modify the state of the emulated ROM installed within it, allowing a wide range of applications, including:
 
-- Remote debugging of code running on real retro systems
 - ROM based bootloaders (think `grub` for the C64)
 - Dynamic ROM patching for games, demos and other applications
+- Remote debugging of code running on real retro systems
 
 ## Building the Plugin
 

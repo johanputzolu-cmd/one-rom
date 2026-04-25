@@ -30,12 +30,35 @@ ORA_DEFINE_USER_PLUGIN(
 
 // ---------------------------------------------------------------------------
 // Ring buffer
+//
+// To change between 8, 16 and 32 bit ring buffer entries change:
+// - RING_DATA_SIZE
+// - RING_BUF_TYPE
+// - ORA_RING_BUF_DECLARE_*BIT to match RING_DATA_SIZE
 // ---------------------------------------------------------------------------
 
-#define RING_ENTRIES_LOG2  6u                               // 64 entries
-#define RING_MASK          ((1u << RING_ENTRIES_LOG2) - 1u)
+#define RING_ENTRIES_LOG2   6u                               // 64 entries
+#define RING_DATA_SIZE      32u                              // 32 bits per entry
+#define RING_MASK           ((1u << RING_ENTRIES_LOG2) - 1u)
+#define RING_BUF_TYPE       uint32_t                         // 32 bit entries
+_Static_assert(sizeof(RING_BUF_TYPE) * 8 == RING_DATA_SIZE, "RING_BUF_TYPE must match RING_DATA_SIZE");
 
-ORA_RING_BUF_DECLARE(ring_buf, RING_ENTRIES_LOG2);
+ORA_RING_BUF_DECLARE_32BIT(ring_buf, RING_ENTRIES_LOG2);
+
+#define RING_BUF_CUR_READ_INDEX()   s_read_idx
+#define RING_BUF_ADV_READ_INDEX()   s_read_idx = (s_read_idx + 1u) & RING_MASK
+#define RING_BUF_UPDATE_READ_INDEX(X) \
+    s_read_idx = (uint32_t)((volatile RING_BUF_TYPE *)(X) - \
+                            (volatile RING_BUF_TYPE *)ring_buf) & RING_MASK
+#define RING_BUF_RESET_READ_INDEX() RING_BUF_UPDATE_READ_INDEX(*s_write_pos_ptr)
+#define RING_BUF_CUR_WRITE_INDEX() \
+    ((uint32_t)((volatile RING_BUF_TYPE *)*s_write_pos_ptr - \
+                (volatile RING_BUF_TYPE *)ring_buf) & RING_MASK)
+#define RING_BUF_GET_ENTRY(X) ((volatile RING_BUF_TYPE *)ring_buf)[(X)]
+
+// Statics used to track ring buffer state.
+static volatile uint32_t * volatile *s_write_pos_ptr; // pointer to DMA write pointer (volatile: DMA hardware updates the register)
+static uint32_t            s_read_idx;      // our read index, kept masked
 
 // ---------------------------------------------------------------------------
 // Knock sequence: "!RBCP!"
@@ -97,6 +120,7 @@ const uint8_t protocol_version[4] = {
 #define CMD_GET_DEVICE_TYPE             0x04u
 #define CMD_GET_DEVICE_VERSION          0x05u
 #define CMD_GET_PROTOCOL_VERSION        0x06u
+#define CMD_SLOT_PEEK                   0x07u
 
 // Modify commands
 #define CMD_SLOT_POKE                   0x00u
@@ -163,13 +187,13 @@ static ora_get_flash_slot_info_fn_t         s_get_flash_slot_info;
 static ora_copy_flash_slot_to_ram_slot_fn_t s_copy_flash_to_ram;
 static ora_get_chip_size_from_type_fn_t     s_get_chip_size;
 static ora_get_device_version_fn_t          s_get_device_version;
+static ora_map_addr_to_phys_fn_t            s_map_addr_to_phys;
+static ora_map_data_to_phys_fn_t            s_map_data_to_phys;
+static ora_demangle_data_fn_t               s_demangle_data;
 
 // ---------------------------------------------------------------------------
 // Ring buffer read helpers
 // ---------------------------------------------------------------------------
-
-static volatile uint32_t * volatile *s_write_pos_ptr; // pointer to DMA write pointer (volatile: DMA hardware updates the register)
-static uint32_t            s_read_idx;      // our read index, kept masked
 
 // Block until the next CS-active address capture is available, then return
 // its A0-A7 as a logical byte.  Entries where CS is inactive are skipped.
@@ -181,12 +205,12 @@ static uint32_t            s_read_idx;      // our read index, kept masked
 // cleaner recovery path.
 static uint8_t ring_read_byte(void) {
     for (;;) {
-        uint32_t write_idx = (uint32_t)(*s_write_pos_ptr - ring_buf) & RING_MASK;
-        if (s_read_idx == write_idx) {
+        if (RING_BUF_CUR_READ_INDEX() == RING_BUF_CUR_WRITE_INDEX()) {
+            // No new byte to read, yet.
             continue;
         }
-        uint32_t phys = ring_buf[s_read_idx];
-        s_read_idx = (s_read_idx + 1u) & RING_MASK;
+        uint32_t phys = (uint32_t)RING_BUF_GET_ENTRY(s_read_idx);
+        RING_BUF_ADV_READ_INDEX();
 
         uint32_t logical;
         if (s_demangle(phys, &logical, 1) == ORA_RESULT_OK) {
@@ -215,13 +239,43 @@ static inline uint8_t failed_val(void) {
 }
 
 // Write one byte into the response header at the given header-relative offset.
-static void hdr_write(uint8_t slot, uint32_t hdr_offset, uint8_t val) {
-    if (s_reprogram(slot, s_state.cfg.region_offset + hdr_offset,
-                    &val, 1u, 1u) != ORA_RESULT_OK) {
-        s_log("RBCP: hdr_write failed at offset %u", (unsigned)hdr_offset);
-        // No recovery is possible: if the back-channel write fails, the host
-        // will poll indefinitely.  Logging is the only meaningful action.
+// These reset_ring arg is intended to be used when update progress->complete,
+// to ensure we collect as few new bytes as possible after the host potentially
+// sees completion, before we can start processing them. 
+static void hdr_write(uint8_t slot, uint32_t hdr_offset, uint8_t val, bool reset_ring) {
+    // Do this directly, rather than s_reprogram, for speed
+    uint32_t phys_addr = s_map_addr_to_phys(s_state.cfg.region_offset + hdr_offset);
+    uint8_t phys_data = s_map_data_to_phys(val);
+    uint32_t slot_base, slot_size;
+    if (s_get_ram_slot_info(slot, &slot_base, &slot_size, NULL) != ORA_RESULT_OK) {
+        s_log("RBCP: hdr_write failed: get_ram_slot_info error");
+        return;
     }
+    if (phys_addr >= slot_size) {
+        s_log("RBCP: hdr_write failed: phys_addr out of bounds (hdr_offset=%u)", (unsigned)hdr_offset);
+        return;
+    }
+    // Reset ring read pointer immediately before writing the byte
+    if (reset_ring) {
+        RING_BUF_RESET_READ_INDEX();
+    }
+    ((volatile uint8_t *)slot_base)[phys_addr] = phys_data;
+}
+
+// Read one byte from the back-channel region at the given header-relative offset.
+static ora_result_t hdr_read(uint8_t slot, uint32_t hdr_offset, uint8_t *val_out) {
+    uint32_t slot_base, slot_size;
+    if (s_get_ram_slot_info(slot, &slot_base, &slot_size, NULL) != ORA_RESULT_OK) {
+        s_log("RBCP: hdr_read failed: get_ram_slot_info error");
+        return ORA_RESULT_INVALID_SLOT;
+    }
+    uint32_t phys_offset = s_map_addr_to_phys(s_state.cfg.region_offset + hdr_offset);
+    uint8_t raw = ((const uint8_t *)slot_base)[phys_offset];
+    if (s_demangle_data(raw, val_out) != ORA_RESULT_OK) {
+        s_log("RBCP: hdr_read failed: demangle error at hdr_offset %u", (unsigned)hdr_offset);
+        return ORA_RESULT_ERROR;
+    }
+    return ORA_RESULT_OK;
 }
 
 // Write bytes into the data section at the given data-section-relative offset.
@@ -249,19 +303,22 @@ static void data_write(
 
 // Steps 1-3: set progress=pending, increment token, update last_cmd.
 static void cmd_begin(uint8_t slot, uint8_t group, uint8_t cmd) {
-    hdr_write(slot, HDR_PROGRESS, pending_val());
+    hdr_write(slot, HDR_PROGRESS, pending_val(), false);
+    hdr_write(slot, HDR_LAST_CMD_GROUP, group, false);
+    hdr_write(slot, HDR_LAST_CMD_CMD, cmd, false);
     s_state.token_lsb++;
     if (s_state.token_lsb == 0u) s_state.token_msb++;
-    hdr_write(slot, HDR_TOKEN_LSB, s_state.token_lsb);
-    hdr_write(slot, HDR_TOKEN_MSB, s_state.token_msb);
-    hdr_write(slot, HDR_LAST_CMD_GROUP, group);
-    hdr_write(slot, HDR_LAST_CMD_CMD, cmd);
+    hdr_write(slot, HDR_TOKEN_LSB, s_state.token_lsb, false);
+    hdr_write(slot, HDR_TOKEN_MSB, s_state.token_msb, false);
 }
 
 // Steps 5-6: write response field then set progress=complete.
 static void cmd_end(uint8_t slot, bool ok) {
-    hdr_write(slot, HDR_RESPONSE, ok ? s_state.cfg.status_ok : failed_val());
-    hdr_write(slot, HDR_PROGRESS, s_state.cfg.complete);
+    // First update the status byte.
+    hdr_write(slot, HDR_RESPONSE, ok ? s_state.cfg.status_ok : failed_val(), false);
+
+    // Now, set progress to complete, which must be the last step.
+    hdr_write(slot, HDR_PROGRESS, s_state.cfg.complete, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +409,7 @@ static bool exec_config_cmd_resp(void) {
     uint8_t complete  = ring_read_byte();
     uint8_t status_ok = ring_read_byte();
 
-    s_log("CONFIG_CMD_RESP: location_id=0x%02X, size_id=0x%02X, complete=0x%02X, status_ok=0x%02X",
+    s_log("CONFIG_CMD_RESP: loc=0x%02X, sz=0x%02X, cplt=0x%02X, stok=0x%02X",
           (unsigned)location, (unsigned)size_id, complete, status_ok);
 
     if (s_state.active) {
@@ -410,13 +467,18 @@ static bool exec_enter_cmd_resp(void) {
     }
     s_state.cfg.region_offset = offset;
     s_state.cfg.region_end = offset + HDR_SIZE + s_state.cfg.data_size;
-    s_state.token_lsb       = 0u;
-    s_state.token_msb       = 0u;
+    // The token must start from the value already in the back-channel region.
+    if (hdr_read(active_slot, HDR_TOKEN_LSB, &s_state.token_lsb) != ORA_RESULT_OK ||
+        hdr_read(active_slot, HDR_TOKEN_MSB, &s_state.token_msb) != ORA_RESULT_OK) {
+        s_log("ENTER_CMD_RESP failed: could not read existing token");
+        return false;
+    }
+    s_log("token=0x%02X%02X", s_state.token_msb, s_state.token_lsb);
     s_state.active_slot     = active_slot;
     init_back_channel(active_slot);
     s_state.active = true;
 
-    s_log("ENTER_CMD_RESP succeeded: active_slot=%u, region_offset=%u, region_end=%u",
+    s_log("ENTER_CMD_RESP succeeded: as=%u, ro=%u, re=%u",
           (unsigned)active_slot, (unsigned)s_state.cfg.region_offset, (unsigned)s_state.cfg.region_end);
     return true;
 }
@@ -454,7 +516,7 @@ static bool get_flash_slot_info(
     zero_bytes(&record[1], 31u);
     if (name != NULL) {
         uint8_t nlen = 0u;
-        while (nlen < 31u && name[nlen] != '\0') nlen++;
+        while (nlen < 30u && name[nlen] != '\0') nlen++;
         for (uint8_t j = 0u; j < nlen; j++) record[1u + j] = (uint8_t)name[j];
     }
     return true;
@@ -539,7 +601,7 @@ static bool exec_get_ram_slot_info_all(uint8_t slot) {
 
     uint8_t resp[4] = { total, slot, (uint8_t)(rom_type & 0xFFu), 0u };
     data_write(slot, 0u, resp, 4u);
-    s_log("GET_RAM_SLOT_INFO: total=%u slot=%u rom_type=0x%02X", (unsigned)total, (unsigned)slot, (unsigned)rom_type);
+    s_log("GET_RAM_SLOT_INFO: tot=%u sl=%u rt=0x%02X", (unsigned)total, (unsigned)slot, (unsigned)rom_type);
     return true;
 }
 
@@ -554,7 +616,7 @@ static bool exec_get_device_type(void) {
     device_type[5] = 'O';
     device_type[6] = 'M';
     data_write(s_state.active_slot, 0u, device_type, sizeof(device_type));
-    s_log("GET_DEVICE_TYPE: device_type=%s", device_type);
+    s_log("GET_DEVICE_TYPE: dt=%s", device_type);
     return true;
 }
 
@@ -562,17 +624,76 @@ static bool exec_get_device_version(void) {
     uint8_t device_version[24];
     zero_bytes(device_version, sizeof(device_version));
     if (s_get_device_version(device_version, sizeof(device_version)) != ORA_RESULT_OK) {
-        s_log("GET_DEVICE_VERSION failed: could not retrieve version");
+        s_log("GET_DEVICE_VERSION failed");
         return false;
     }
     data_write(s_state.active_slot, 0u, device_version, sizeof(device_version));
-    s_log("GET_DEVICE_VERSION: device_version=%s", device_version);
+    s_log("GET_DEVICE_VERSION: ver=%s", device_version);
     return true;
 }
 
 static bool exec_get_protocol_version(void) {
     data_write(s_state.active_slot, 0u, protocol_version, sizeof(protocol_version));
-    s_log("GET_PROTOCOL_VERSION: protocol_version=%u.%u.%u", (unsigned)protocol_version[0], (unsigned)protocol_version[1], (unsigned)protocol_version[2]);
+    s_log("GET_PROTOCOL_VERSION: ver=%u.%u.%u", (unsigned)protocol_version[0], (unsigned)protocol_version[1], (unsigned)protocol_version[2]);
+    return true;
+}
+
+static bool exec_slot_peek(void) {
+    uint8_t target = ring_read_byte();
+    uint8_t a0     = ring_read_byte();
+    uint8_t a1     = ring_read_byte();
+    uint8_t a2     = ring_read_byte();
+    uint8_t count  = ring_read_byte();
+
+    s_log("SLOT_PEEK: tgt=%u a0=0x%02X a1=0x%02X a2=0x%02X ct=%u",
+          (unsigned)target, (unsigned)a0, (unsigned)a1, (unsigned)a2, (unsigned)count);
+
+    uint32_t addr       = (uint32_t)a0
+                        | ((uint32_t)a1 << 8u)
+                        | ((uint32_t)a2 << 16u);
+    uint32_t byte_count = (count == 0u) ? 256u : (uint32_t)count;
+
+    if (byte_count > s_state.cfg.data_size) {
+        s_log("SLOT_PEEK failed: ct %u vs data size %u",
+              (unsigned)byte_count, (unsigned)s_state.cfg.data_size);
+        return false;
+    }
+
+    uint32_t slot_base, slot_size;
+    if (s_get_ram_slot_info(target, &slot_base, &slot_size, NULL) != ORA_RESULT_OK) {
+        s_log("SLOT_PEEK failed: tgt slot %u", (unsigned)target);
+        return false;
+    }
+
+    if (addr + byte_count > slot_size) {
+        s_log("SLOT_PEEK failed: read range exceeds slot size");
+        return false;
+    }
+
+    // Write the requested data in chunks, small enough to not blow the stack
+    const uint32_t buf_size = 32u;
+    uint8_t  buf[buf_size];
+    uint32_t remaining  = byte_count;
+    uint32_t data_off   = 0u;
+
+    while (remaining > 0u) {
+        uint32_t chunk = (remaining > buf_size) ? buf_size : remaining;
+        for (uint32_t i = 0u; i < chunk; i++) {
+            uint32_t phys_offset = s_map_addr_to_phys(addr + data_off + i);
+            uint8_t  raw         = ((const uint8_t *)slot_base)[phys_offset];
+            if (s_demangle_data(raw, &buf[i]) != ORA_RESULT_OK) {
+                s_log("SLOT_PEEK failed: demangle error at offset %u",
+                      (unsigned)(data_off + i));
+                return false;
+            }
+        }
+        data_write(s_state.active_slot, data_off, buf, chunk);
+        data_off  += chunk;
+        remaining -= chunk;
+    }
+
+    s_log("SLOT_PEEK: slot=%u addr=0x%06X count=%u",
+          (unsigned)target, (unsigned)addr, (unsigned)byte_count);
     return true;
 }
 
@@ -603,9 +724,17 @@ static bool exec_load_slot(void) {
     uint8_t ram_slot   = ring_read_byte();
     uint8_t flash_slot = ring_read_byte();
     s_log("LOAD_SLOT: ram_slot=%u flash_slot=%u", (unsigned)ram_slot, (unsigned)flash_slot);
-    return (s_copy_flash_to_ram(flash_slot,
-                                ORA_FLASH_SLOT_FLAG_EXCLUDE_PLUGINS,
-                                ram_slot, 0u) == ORA_RESULT_OK);
+    ora_result_t rc = s_copy_flash_to_ram(
+        flash_slot,
+        ORA_FLASH_SLOT_FLAG_EXCLUDE_PLUGINS,
+        ram_slot,
+        0u
+    );
+    if (rc != ORA_RESULT_OK) {
+        s_log("LOAD_SLOT failed: copy_flash_to_ram error %d", (int)rc);
+        return false;
+    }
+    return true;
 }
 
 static bool exec_slot_poke_all_byte(void) {
@@ -722,6 +851,9 @@ static bool dispatch(
                 case CMD_GET_PROTOCOL_VERSION:
                     ok = exec_get_protocol_version();
                     break;
+                case CMD_SLOT_PEEK:
+                    ok = exec_slot_peek();
+                    break;
                 default:
                     ok = false;
                     break;
@@ -781,7 +913,7 @@ static bool dispatch(
     }
 
     if (!ok) {
-        s_log("Command failed");
+        s_log("CMD g=0x%02x c=0x%02x failed", group, cmd);
     }
 
     return ok;
@@ -861,6 +993,9 @@ void rbcp_main(
     s_copy_flash_to_ram    = ora_lookup_fn(ORA_ID_COPY_FLASH_SLOT_TO_RAM_SLOT);
     s_get_chip_size        = ora_lookup_fn(ORA_ID_GET_CHIP_SIZE_FROM_TYPE);
     s_get_device_version   = ora_lookup_fn(ORA_ID_GET_DEVICE_VERSION);
+    s_map_addr_to_phys     = ora_lookup_fn(ORA_ID_MAP_ADDR_TO_PHYS);
+    s_map_data_to_phys     = ora_lookup_fn(ORA_ID_MAP_DATA_TO_PHYS);
+    s_demangle_data        = ora_lookup_fn(ORA_ID_DEMANGLE_DATA);
 
     ora_setup_address_monitor_fn_t              setup_address_monitor =
         ora_lookup_fn(ORA_ID_SETUP_ADDRESS_MONITOR);
@@ -877,9 +1012,15 @@ void rbcp_main(
 
     // Set up address monitor in control mode so the plugin can modify the
     // ROM image being served (required for back-channel writes).
-    if (setup_address_monitor(ring_buf, RING_ENTRIES_LOG2,
-                              ORA_MONITOR_MODE_CONTROL, NULL) != ORA_RESULT_OK) {
-        s_log("RBCP: address monitor setup failed");
+    ora_result_t rc = setup_address_monitor(
+        ring_buf,
+        RING_ENTRIES_LOG2,
+        ORA_MONITOR_MODE_CONTROL,
+        RING_DATA_SIZE,
+        NULL
+    );
+    if (rc != ORA_RESULT_OK) {
+        s_log("RBCP: address monitor setup failed %d", rc);
         return;
     }
 
@@ -893,7 +1034,13 @@ void rbcp_main(
 
     // Pre-compute knock sequence match values before starting the monitor.
     ORA_KNOCK_DECLARE(knock, KNOCK_LEN);
-    if (init_knock(s_knock_seq, KNOCK_LEN, 8u, knock) != ORA_RESULT_OK) {
+    if (init_knock(
+            s_knock_seq,
+            KNOCK_LEN,
+            8u,
+            RING_DATA_SIZE,
+            knock
+        ) != ORA_RESULT_OK) {
         s_log("RBCP: knock init failed");
         return;
     }
@@ -905,11 +1052,6 @@ void rbcp_main(
 
     // Main loop — each outer iteration begins with a knock.
     for (;;) {
-        // WARNING.  There must be NO logging between detecting a knock and
-        // consuming any argument bytes (in cmd/resp mode) or at all (in cmd 
-        // mode) as otherwise the ring buffer may fill with log entries and
-        // overwrite some before the code gets a chance to read them.
-
         // Collect GROUP and CMD as the two payload bytes immediately following
         // the knock.  wait_for_knock blocks until both are captured in the
         // ring buffer.  Payload entries are raw physical GPIO captures.
@@ -927,7 +1069,16 @@ void rbcp_main(
                            preamble, 2u, NULL, &next_read) != ORA_RESULT_OK) {
             continue;
         }
-        s_read_idx = (uint32_t)(next_read - ring_buf) & RING_MASK;
+
+        // WARNING.  There must be NO logging between detecting a knock and
+        // consuming any argument bytes (in cmd/resp mode) or at all (in cmd 
+        // mode) as otherwise the ring buffer may fill with log entries and
+        // overwrite some before the code gets a chance to read them.
+        //
+        // That means no logging here until after the command itself reads
+        // any further argument bytes.
+
+        RING_BUF_UPDATE_READ_INDEX(next_read);
 
         // Demangle GROUP and CMD from physical captures to logical addresses.
         // ORA_WAIT_FOR_KNOCK_FLAG_DEBOUNCE_CS guarantees payload entries are
@@ -939,28 +1090,17 @@ void rbcp_main(
         if (s_demangle(preamble[1], &logical, 0) != ORA_RESULT_OK) continue;
         uint8_t cmd = (uint8_t)(logical & 0xFFu);
 
-        //s_log("RBCP: knock received, group=%02x cmd=%02x", group, cmd);
-
-        // Execute the command.  In Command mode the session ends here and we
-        // return to the top of the outer loop to await the next knock.
-        // ENTER_CMD_RESP transitions into Command-Response mode, in which
-        // case run_command returns true and we enter the inner loop.
-        if (!run_command(group, cmd)) {
-            continue;
-        }
-
-        // Command-Response mode inner loop: read commands directly from the
-        // ring buffer without a knock between them.
-        while (s_state.active) {
-            // After a command has been run, we need to reset the read index to
-            // the current write position to discard any bytes that came in
-            // during our handling (most likely random bus noise).
-            s_read_idx = (uint32_t)(*s_write_pos_ptr - ring_buf) & RING_MASK;
-
+        // Execute the command.  In command mode run_command returns false, so
+        // this executes once.  In command-response mode (until it exits) it
+        // returns true, so we loop, reading the next command directly from the
+        // ring buffer without waiting for another knock.
+        while (run_command(group, cmd)) {
             group = ring_read_byte();
             cmd   = ring_read_byte();
-            run_command(group, cmd);
-
+            // run_command (via cmd_end, via hdr_write) discards any reads
+            // until the point it signals completion, unless the command was
+            // a silent exit, in which case it doesn't - but the
+            // wait_for_knock handles that.
         }
 
         // Command-Response mode exited (or Command-mode session ended).

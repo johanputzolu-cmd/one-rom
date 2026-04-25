@@ -40,6 +40,8 @@
 //                          // defined, DEBUG_LOGGING is also enabled.
 // #define FORCE_16_BIT 1   // Force 16 bit mode.  This can still be overridden
 //                          // using firmware overrides
+// #define PLUGIN_LOGGING 1 // Enable logging from plugins.  Separate from
+//                          // BOOT_LOGGING.
 //
 // sdrr-gen also provides the rom images:
 //

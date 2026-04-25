@@ -159,38 +159,39 @@ void log_roms(const onerom_metadata_header_t *metadata_header) {
 }
 #endif // BOOT_LOGGING
 
-#if defined(BOOT_LOGGING) && !(TEST_BUILD)
-// Special version of logging function that remains on flash, and we can get
-// a pointer to, to call from within functions (potentially) loaded to RAM.
-// Those functions call RAM_LOG(), which only takes a single arg.
-void __attribute__((noinline)) do_log_v(const char* msg, va_list args) {
-    SEGGER_RTT_vprintf(0, msg, &args);
+#if !(TEST_BUILD)
+void __attribute__((noinline)) do_log_v(const char* msg, va_list* args) {
+    SEGGER_RTT_vprintf(0, msg, args);
     SEGGER_RTT_printf(0, "\n");
-}
-
-void __attribute__((noinline)) do_log(const char* msg, ...) {
-    va_list args;
-    va_start(args, msg);
-    do_log_v(msg, args);
-    va_end(args);
 }
 
 void do_err_log_prefix() {
     SEGGER_RTT_printf(0, "ERROR: ");
 }
 
+#if defined(DEBUG_LOGGING)
+void do_debug_log_prefix() {
+    SEGGER_RTT_printf(0, "DBG: ");
+}
+#endif // DEBUG_LOGGING
+
+#if defined(BOOT_LOGGING)
+void __attribute__((noinline)) do_log(const char* msg, ...) {
+    va_list args;
+    va_start(args, msg);
+    do_log_v(msg, &args);
+    va_end(args);
+}
+
 void __attribute__((noinline)) err_log(const char* msg, ...) {
     do_err_log_prefix();
     va_list args;
     va_start(args, msg);
-    do_log_v(msg, args);
+    do_log_v(msg, &args);
     va_end(args);
 }
-
-void do_debug_log_prefix() {
-    SEGGER_RTT_printf(0, "DBG: ");
-}
-#endif // BOOT_LOGGING && !(TEST_BUILD)
+#endif // BOOT_LOGGING
+#endif // !TEST_BUILD
 
 //
 // Functions to handle copying functions to and executing them from RAM

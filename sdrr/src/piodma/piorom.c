@@ -2111,12 +2111,21 @@ int piorom(
     return 0;
 }
 
+#if !defined(TEST_BUILD)
+
 static void pio_setup_address_monitor_pios() {
     piorom_config_t *piorom_config = &sdrr_runtime_info.piorom_config;
     uint8_t num_cs_pins = piorom_config->num_cs_pins;
     uint8_t cs_base_pin = piorom_config->cs_base_pin;
     uint8_t num_addr_pins = piorom_config->num_addr_pins;
     uint8_t base_addr_pin = piorom_config->addr_base_pin;
+
+    // For multi-ROM mode, we ignore X1 and X2 and only montior the "first"
+    // ROM.  We also only support 2364s.
+    if (piorom_config->multi_rom_mode) {
+        num_cs_pins = 1;
+        cs_base_pin = sdrr_info.pins->cs1;
+    }
 
     APIO_ASM_INIT();
     APIO_SET_BLOCK(BLOCK_MONITOR);
@@ -2132,14 +2141,26 @@ static void pio_setup_address_monitor_pios() {
         APIO_WRAP_BOTTOM();
         APIO_LABEL_NEW(cs_inactive);
         APIO_ADD_INSTR(APIO_MOV_X_PINS);
-        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(cs_inactive)));
+        if (!piorom_config->multi_rom_mode) {
+            // CS active == zero
+            APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(cs_inactive)));
+        } else {
+            // CS active == non-zero (pins inverted)
+            APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(cs_inactive)));
+        }
 
         APIO_ADD_INSTR(APIO_IRQ_SET(ADDR_MONITOR_IRQ));
 
         APIO_LABEL_NEW(cs_active);
         APIO_ADD_INSTR(APIO_MOV_X_PINS);
         APIO_WRAP_TOP();
-        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(cs_active)));
+        if (!piorom_config->multi_rom_mode) {
+            // CS inactive == non-zero
+            APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(cs_active)));
+        } else {
+            // CS inactive == zero (pins inverted)
+            APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(cs_active)));
+        }
     } else {
         // Non-contiguous CS pins - CS active == zero OR cs_pin_2nd_match
         APIO_ADD_INSTR(APIO_SET_Y(piorom_config->cs_pin_2nd_match));
@@ -2204,8 +2225,18 @@ static void pio_setup_address_monitor_dma(
     uint8_t block,
     uint8_t sm_addr_read,
     volatile uint32_t *ring_buf,
-    uint8_t ring_size_log2
+    uint8_t ring_size_log2,
+    uint8_t data_size
 ) {
+    uint32_t dma_data_size;
+    if (data_size == 8) {
+        dma_data_size = DMA_CTRL_TRIG_DATA_SIZE_8BIT;
+    } else if (data_size == 16) {
+        dma_data_size = DMA_CTRL_TRIG_DATA_SIZE_16BIT;
+    } else {
+        dma_data_size = DMA_CTRL_TRIG_DATA_SIZE_32BIT;
+    }
+
     // SM1 RX FIFO -> ring_buf circular write
     volatile dma_ch_reg_t *dma_reg = DMA_CH_REG(dma_ch);
     dma_reg->read_addr = (uint32_t)&APIO0_SM_RXF(sm_addr_read);
@@ -2213,7 +2244,7 @@ static void pio_setup_address_monitor_dma(
     dma_reg->transfer_count = 0xffffffff;
     dma_reg->ctrl_trig =
         DMA_CTRL_TRIG_EN |
-        DMA_CTRL_TRIG_DATA_SIZE_32BIT |
+        dma_data_size |
         DMA_CTRL_RING_SIZE(ring_size_log2) |
         DMA_CTRL_RING_SEL |
         DMA_CTRL_INCR_WRITE |
@@ -2230,13 +2261,15 @@ ora_result_t pio_setup_address_monitor(
     volatile uint32_t *ring_buf,
     uint8_t ring_entries_log2,
     ora_monitor_mode_t mode,
+    uint8_t data_size,
     void *reserved
 ) {
     (void)mode;
     (void)reserved;
 
-    uint32_t ring_size_log2 = ring_entries_log2 + 2; // 4 bytes per entry
-    uint32_t ring_size = 1 << ring_size_log2;
+    uint32_t bytes_per_entry_log2 = __builtin_ctz(data_size / 8); // 8->0, 16->1, 32->2
+    uint32_t ring_size_log2 = ring_entries_log2 + bytes_per_entry_log2;
+    uint32_t ring_size = 1u << ring_size_log2;
 
     // Check ring_buf is valid and aligned to ring size
     if (ring_buf == NULL) {
@@ -2252,7 +2285,8 @@ ora_result_t pio_setup_address_monitor(
         BLOCK_MONITOR,
         SM_ADDR_MONITOR_ADDR_READ,
         ring_buf,
-        ring_size_log2
+        ring_size_log2,
+        data_size
     );
 
     return ORA_RESULT_OK;
@@ -2282,6 +2316,17 @@ uint32_t pio_map_addr_to_phys(uint32_t logical_addr) {
             }
         }
     }
+
+    // In multi-ROM mode CS1 is part of the SRAM address space, and active
+    // CS1 = bit SET (inverted).  Always OR in the CS1 bit so back-channel
+    // writes land in the correct half of SRAM that the host is reading from.
+    if (piorom_config->multi_rom_mode) {
+        uint8_t cs1_pin = sdrr_info.pins->cs1;
+        if (cs1_pin < MAX_USED_GPIOS) {
+            physical |= (1u << (cs1_pin - base));
+        }
+    }
+
     return physical;
 }
 
@@ -2318,14 +2363,25 @@ ora_result_t pio_demangle_addr(
         uint8_t x1  = sdrr_info.pins->x1;
         uint8_t x2  = sdrr_info.pins->x2;
         uint8_t cs1 = sdrr_info.pins->cs1;
-        if ((x1  < MAX_USED_GPIOS) && (physical_addr & (1u << (x1  - base)))) {
-            return ORA_RESULT_CONTROL_PIN_ACTIVE;
-        }
-        if ((x2  < MAX_USED_GPIOS) && (physical_addr & (1u << (x2  - base)))) {
-            return ORA_RESULT_CONTROL_PIN_ACTIVE;
-        }
-        if ((cs1 < MAX_USED_GPIOS) && (physical_addr & (1u << (cs1 - base)))) {
-            return ORA_RESULT_CONTROL_PIN_ACTIVE;
+
+        if (!piorom_config->multi_rom_mode) {
+            // CS1 active low, not inverted - reject if CS1 inactive (set)
+            if ((cs1 < MAX_USED_GPIOS) && (physical_addr & (1u << (cs1 - base)))) {
+                return ORA_RESULT_CONTROL_PIN_ACTIVE;
+            }
+        } else {
+            // Pins are inverted - CS1 active = bit SET, X pins active = bit SET
+            // Reject if CS1 inactive (clear)
+            if ((cs1 < MAX_USED_GPIOS) && !(physical_addr & (1u << (cs1 - base)))) {
+                return ORA_RESULT_CONTROL_PIN_ACTIVE;
+            }
+            // Reject if any X pin active (set)
+            if ((x1 < MAX_USED_GPIOS) && (physical_addr & (1u << (x1 - base)))) {
+                return ORA_RESULT_CONTROL_PIN_ACTIVE;
+            }
+            if ((x2 < MAX_USED_GPIOS) && (physical_addr & (1u << (x2 - base)))) {
+                return ORA_RESULT_CONTROL_PIN_ACTIVE;
+            }
         }
     }
 
@@ -2343,10 +2399,25 @@ ora_result_t pio_demangle_addr(
     return ORA_RESULT_OK;
 }
 
+uint8_t pio_demangle_data(uint8_t physical_data) {
+    uint8_t base = sdrr_runtime_info.piorom_config.data_base_pin;
+    uint8_t logical = 0;
+    for (uint8_t b = 0; b < 8; b++) {
+        uint8_t pin = sdrr_info.pins->data[b];
+        if (pin < MAX_USED_GPIOS) {
+            if (physical_data & (1u << (pin - base))) {
+                logical |= (1u << b);
+            }
+        }
+    }
+    return logical;
+}
+
 ora_result_t pio_init_knock(
     const uint32_t *knock_seq,
     uint8_t knock_len,
     uint8_t knock_bits,
+    uint8_t data_size,
     ora_knock_t *knock
 ) {
     piorom_config_t *piorom_config = &sdrr_runtime_info.piorom_config;
@@ -2383,11 +2454,94 @@ ora_result_t pio_init_knock(
         }
     }
 
+    // Calculate CS and X pin masks for filtering during knock detection and
+    // payload collection
+    uint32_t cs_mask = 0;
+    uint32_t x_mask = 0;
+
+    // TODO - handle non 2364 chip types with different CS pin arrangements
+    uint8_t cs1_pin = sdrr_info.pins->cs1;
+    if (cs1_pin < MAX_USED_GPIOS) {
+        cs_mask = 1u << (cs1_pin - base);
+    }
+    if (!piorom_config->multi_rom_mode) {
+        knock->multi_rom_mode = 0;
+    } else {
+        uint8_t x1_pin = sdrr_info.pins->x1;
+        uint8_t x2_pin = sdrr_info.pins->x2;
+        if (x1_pin < MAX_USED_GPIOS) {
+            x_mask |= 1u << (x1_pin - base);
+        }
+        if (x2_pin < MAX_USED_GPIOS) {
+            x_mask |= 1u << (x2_pin - base);
+        }
+        knock->multi_rom_mode = 1;
+    }
+
     knock->len  = knock_len;
     knock->bits = knock_bits;
+    knock->data_size = data_size;
+    knock->cs_mask = cs_mask;
+    knock->x_mask = x_mask;
 
     return ORA_RESULT_OK;
 }
+
+__attribute__((always_inline)) static inline uint8_t debounce(
+    uint32_t entry,
+    const ora_knock_t *knock
+) {
+    if (!knock->multi_rom_mode) {
+        if (knock->cs_mask && (entry & knock->cs_mask)) return 1;     // CS inactive - bit set (active low, not inverted)
+    } else {
+        if (knock->cs_mask && !(entry & knock->cs_mask)) return 1;  // CS inactive - bit clear after inversion
+    }
+    if (knock->x_mask && (entry & knock->x_mask)) return 1;     // X pin active
+    return 0;
+}
+
+// Written as a macro to allow multiple data sizes
+#define KNOCK_DETECT_LOOP(TYPE) do {                                        \
+    volatile TYPE *rp = (volatile TYPE *)read_ptr;                          \
+    volatile TYPE *rb = (volatile TYPE *)ring_buf;                          \
+    while (knock_pos < knock->len) {                                        \
+        volatile TYPE *wp = (volatile TYPE *)                               \
+            DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;                    \
+        while (rp != wp) {                                                  \
+            uint32_t entry = (uint32_t)*rp;                                 \
+            if (++rp >= rb + ring_entries) rp = rb;                         \
+            if (debounce_cs) {                                              \
+                if (debounce(entry, knock)) continue;                       \
+            }                                                               \
+            if ((entry & knock->mask) == knock->matches[knock_pos]) {       \
+                knock_pos++;                                                \
+                if (knock_pos >= knock->len) break;                         \
+            } else {                                                        \
+                knock_pos = ((entry & knock->mask) == knock->matches[0])    \
+                    ? 1 : 0;                                                \
+            }                                                               \
+        }                                                                   \
+    }                                                                       \
+    read_ptr = (volatile uint32_t *)rp;                                     \
+} while (0)
+
+#define PAYLOAD_COLLECT_LOOP(TYPE) do {                                     \
+    volatile TYPE *rp = (volatile TYPE *)read_ptr;                          \
+    volatile TYPE *rb = (volatile TYPE *)ring_buf;                          \
+    while (payload_pos < payload_len) {                                     \
+        volatile TYPE *wp = (volatile TYPE *)                               \
+            DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;                    \
+        while (rp != wp && payload_pos < payload_len) {                     \
+            uint32_t entry = (uint32_t)*rp;                                 \
+            if (++rp >= rb + ring_entries) rp = rb;                         \
+            if (debounce_cs) {                                              \
+                if (debounce(entry, knock)) continue;                       \
+            }                                                               \
+            payload_out[payload_pos++] = entry;                             \
+        }                                                                   \
+    }                                                                       \
+    read_ptr = (volatile uint32_t *)rp;                                     \
+} while (0)
 
 ora_result_t pio_wait_for_knock(
     const ora_knock_t *knock,
@@ -2416,67 +2570,22 @@ ora_result_t pio_wait_for_knock(
     }
 
     uint32_t ring_entries = 1u << ring_entries_log2;
-    uint32_t cs_mask = 0;
+    uint8_t debounce_cs = (flags & ORA_WAIT_FOR_KNOCK_FLAG_DEBOUNCE_CS) != 0;
 
-    if (flags & ORA_WAIT_FOR_KNOCK_FLAG_DEBOUNCE_CS) {
-        piorom_config_t *piorom_config = &sdrr_runtime_info.piorom_config;
-        uint8_t base = piorom_config->addr_base_pin;
-        uint8_t cs1_pin = sdrr_info.pins->cs1;
-        if (cs1_pin < MAX_USED_GPIOS) {
-            cs_mask = 1u << (cs1_pin - base);
-        }
-    }
-
-    // Detection loop
+    // Knock detection loop
     uint8_t knock_pos = 0;
-    while (knock_pos < knock->len) {
-        volatile uint32_t *write_ptr = (volatile uint32_t *)DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
-        while (read_ptr != write_ptr) {
-            // Still bytes to read
-            uint32_t entry = *read_ptr;
-            if (++read_ptr >= ring_buf + ring_entries) {
-                // Wrap read pointer if we reach the end of the ring buffer
-                read_ptr = ring_buf;
-            }
-
-            if (cs_mask && (entry & cs_mask)) {
-                // Skip as CS wasn't active - this is part of debounce handling
-                continue;
-            }
-
-            if ((entry & knock->mask) == knock->matches[knock_pos]) {
-                // This entry matches the current knock position - advance to
-                // look for the next one
-                knock_pos++;
-                if (knock_pos >= knock->len) {
-                    // Full sequence matched - break out to collect payload
-                    break;
-                }
-            } else {
-                // No match - if this was a potential match for the first
-                // knock position, stay at that position, otherwise reset to
-                // start looking for the sequence from the beginning
-                knock_pos = ((entry & knock->mask) == knock->matches[0]) ? 1 : 0;
-            }
-        }
+    switch (knock->data_size) {
+        case 8:  KNOCK_DETECT_LOOP(uint8_t);  break;
+        case 16: KNOCK_DETECT_LOOP(uint16_t); break;
+        default: KNOCK_DETECT_LOOP(uint32_t); break;
     }
 
     // Payload collection
     uint8_t payload_pos = 0;
-    while (payload_pos < payload_len) {
-        volatile uint32_t *write_ptr = (volatile uint32_t *)DMA_CH_REG(DMA_CH_ADDR_MONITOR)->write_addr;
-        while (read_ptr != write_ptr && payload_pos < payload_len) {
-            uint32_t entry = *read_ptr;
-            if (++read_ptr >= ring_buf + ring_entries) {
-                read_ptr = ring_buf;
-            }
-
-            if (cs_mask && (entry & cs_mask)) {
-                continue;
-            }
-
-            payload_out[payload_pos++] = entry;
-        }
+    switch (knock->data_size) {
+        case 8:  PAYLOAD_COLLECT_LOOP(uint8_t);  break;
+        case 16: PAYLOAD_COLLECT_LOOP(uint16_t); break;
+        default: PAYLOAD_COLLECT_LOOP(uint32_t); break;
     }
 
     if (next_read_out != NULL) {
@@ -2582,5 +2691,7 @@ ora_result_t pio_switch_rom_region(uint32_t new_region_addr) {
 
     return ORA_RESULT_OK;
 }
+
+#endif // !TEST_BUILD
 
 #endif // RP235X

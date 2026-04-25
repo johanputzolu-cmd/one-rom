@@ -41,7 +41,7 @@ pub enum Error {
     Device,
 
     #[error(
-        "No One ROM was specified.\n  Specify a One ROM using --serial.\n  Use 'onerom scan' to list connected One ROMs."
+        "No One ROM was found or specified.\n  Specify a One ROM using --serial.\n  Use 'onerom scan' to list connected One ROMs."
     )]
     NoDevice,
 

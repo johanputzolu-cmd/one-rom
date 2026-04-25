@@ -166,6 +166,13 @@ SWD ?= 1
 BOOT_LOGGING ?= 0
 # BOOT_LOGGING ?= 1
 
+# Plugin logging configuration
+#
+# Enables logs from plugins that support it.
+
+PLUGIN_LOGGING ?= 0
+# PLUGIN_LOGGING ?= 1
+
 # Main loop logging configuration
 #
 # This option enables/disabld logging within main_loop (see sdrr.rom_impl.c).
@@ -486,6 +493,16 @@ else
   BOOT_LOGGING_FLAG = 
 endif
 
+# Set plugin logging flag based on PLUGIN_LOGGING variable
+ifeq ($(PLUGIN_LOGGING), 1)
+ifneq ($(SUPPRESS_OUTPUT),1)
+  $(info - PLUGIN_LOGGING=$(PLUGIN_LOGGING))
+endif
+  PLUGIN_LOGGING_FLAG = --plugin-logging
+else
+  PLUGIN_LOGGING_FLAG =
+endif
+
 # Set main loop logging flag based on MAIN_LOOP_LOGGING variable
 ifeq ($(MAIN_LOOP_LOGGING), 1)
 ifneq ($(SUPPRESS_OUTPUT),1)
@@ -701,10 +718,10 @@ gen: $(CARGO_TARGET_DIR)/sdrr-gen
 	@echo "- generate firmware settings"
 	@echo "- retrieve ROM data"
 	@echo "- process ROM data into One ROM firmware files"
-	@echo "- Args: --mcu $(MCU) $(HW_REV_FLAG) $(OSC_FLAG) $(ROM_ARGS) $(SWD_FLAG) $(COUNT_ROM_ACCESS_FLAG) $(BOOT_LOGGING_FLAG) $(MAIN_LOOP_LOGGING_FLAG) $(DEBUG_LOGGING_FLAG) $(MCO_FLAG) $(MCO2_FLAG) $(FREQ_FLAG) $(OVERCLOCK_FLAG) $(STATUS_LED_FLAG) $(BOOTLOADER_FLAG) $(DISABLE_PRELOAD_TO_RAM_FLAG) $(SERVE_ALG_FLAG) $(ARGS) --overwrite --output-dir $(GEN_OUTPUT_DIR)"
+	@echo "- Args: --mcu $(MCU) $(HW_REV_FLAG) $(OSC_FLAG) $(ROM_ARGS) $(SWD_FLAG) $(COUNT_ROM_ACCESS_FLAG) $(BOOT_LOGGING_FLAG) $(PLUGIN_LOGGING_FLAG) $(MAIN_LOOP_LOGGING_FLAG) $(DEBUG_LOGGING_FLAG) $(MCO_FLAG) $(MCO2_FLAG) $(FREQ_FLAG) $(OVERCLOCK_FLAG) $(STATUS_LED_FLAG) $(BOOTLOADER_FLAG) $(DISABLE_PRELOAD_TO_RAM_FLAG) $(SERVE_ALG_FLAG) $(ARGS) --overwrite --output-dir $(GEN_OUTPUT_DIR)"
 	@echo "-----"
 	@mkdir -p $(GEN_OUTPUT_DIR)
-	@$(CARGO_TARGET_DIR)/sdrr-gen --mcu $(MCU) $(HW_REV_FLAG) $(OSC_FLAG) $(ROM_ARGS) $(SWD_FLAG) $(COUNT_ROM_ACCESS_FLAG) $(BOOT_LOGGING_FLAG) $(MAIN_LOOP_LOGGING_FLAG) $(DEBUG_LOGGING_FLAG) $(MCO_FLAG) $(MCO2_FLAG) $(FREQ_FLAG) $(OVERCLOCK_FLAG) $(STATUS_LED_FLAG) $(BOOTLOADER_FLAG) $(DISABLE_PRELOAD_TO_RAM_FLAG) $(SERVE_ALG_FLAG) $(ARGS) --overwrite --output-dir $(GEN_OUTPUT_DIR)
+	@$(CARGO_TARGET_DIR)/sdrr-gen --mcu $(MCU) $(HW_REV_FLAG) $(OSC_FLAG) $(ROM_ARGS) $(SWD_FLAG) $(COUNT_ROM_ACCESS_FLAG) $(BOOT_LOGGING_FLAG) $(PLUGIN_LOGGING_FLAG) $(MAIN_LOOP_LOGGING_FLAG) $(DEBUG_LOGGING_FLAG) $(MCO_FLAG) $(MCO2_FLAG) $(FREQ_FLAG) $(OVERCLOCK_FLAG) $(STATUS_LED_FLAG) $(BOOTLOADER_FLAG) $(DISABLE_PRELOAD_TO_RAM_FLAG) $(SERVE_ALG_FLAG) $(ARGS) --overwrite --output-dir $(GEN_OUTPUT_DIR)
 
 sdrr-info:
 	@echo "=========================================="
