@@ -10,6 +10,8 @@ The functionality of the external flash has not been verified.  This design has 
 
 Odds are good that all will work, but buyer beware.
 
+Note that this board does not work with Amiga A500 revision 5 (also known the "oops" revision) PCB, as on this PCB two pins have been transposed (hence the "oops").  You would need an adapter board to use this revision of One ROM 40 in an Amiga A500 rev 5.
+
 ## Contents
 
 - [Schematic](./fire-40-a-schematic.pdf)
