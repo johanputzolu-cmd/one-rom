@@ -7,3 +7,7 @@ blank
 
 # Skipped because it contains an image with a proprietary license 
 c64
+
+# Skipped because they fail often
+third-party/coco2
+third-party/ti994a
