@@ -179,6 +179,7 @@ impl From<BitMode> for usize {
 pub struct Chip {
     pub pins: ChipPins,
     pub bit_modes: Vec<BitMode>,
+    pub extra_types: Option<Vec<String>>,
 }
 
 impl Chip {

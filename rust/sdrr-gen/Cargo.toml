@@ -1,6 +1,6 @@
 [package]
 name = "sdrr-gen"
-version = "0.6.8"
+version = "0.6.9"
 edition = "2024"
 authors = ["Piers Finlayson <piers@piers.rocks>"]
 description = "One ROM firmware generator"
@@ -10,8 +10,8 @@ license = "MIT"
 keywords = ["embedded", "rom", "eeprom", "eprom", "flash"]
 
 [dependencies]
-onerom-config = { path="../config", version = "0.4.7" }
-onerom-gen = { path="../gen", version = "0.5.6" }
+onerom-config = { path="../config", version = "0.4.8" }
+onerom-gen = { path="../gen", version = "0.5.7" }
 
 anyhow = ">=1.0.100"
 bytes = ">=1.10.1"

@@ -21,6 +21,9 @@ There are a few non-backwards compatible plugin API changes:
 - setup_address_monitor() and init_knock() have gained a data_size argument, which must be aligned with the ORA_RING_BUF_DECLARE variant used
 - wait_for_knock() has gained additional optional arguments to allow a plugin more control over the knock behaviour
 
+Also added:
+- 2364 support on One ROM 28 boards.
+
 ## v0.6.8 - 2026-04-02
 
 - One ROM Fire - Add read support for 28C16 (24), 28C64 (28), 28C256 (28) and 28C512 (32) EEPROMs (#169).  These have all been live tested.

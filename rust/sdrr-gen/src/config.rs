@@ -110,9 +110,9 @@ impl Config {
 
         // Check all ROMs are compatible with the selected board
         for rom in &self.chips {
-            if self.board.chip_pins() != rom.rom_type.chip_pins() {
+            if !self.board.supports_chip_type(rom.rom_type) {
                 return Err(format!(
-                    "ROM type {} is not supported on selected hardware revision {} as it has the wrong number of pins",
+                    "ROM type {} is not supported on selected hardware revision {}",
                     rom.rom_type.name(),
                     self.board.name()
                 ));

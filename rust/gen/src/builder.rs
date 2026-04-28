@@ -803,15 +803,17 @@ impl Builder {
         for (set_id, chip_set_config) in self.config.chip_sets.iter().enumerate() {
             let mut set_roms = Vec::new();
 
-            if let Some(overrides) = chip_set_config.firmware_overrides.as_ref() &&
-                let Some(fire) = overrides.fire.as_ref() && fire.serve_mode == Some(FireServeMode::Cpu) {
-                    if props.board().chip_pins() != 24 {
-                        return Err(Error::InvalidConfig {
-                            error: "Fire CPU serving mode is only supported on One ROM 24".to_string(),
-                        });
-                    } else if chip_set_config.chips[0].chip_type == ChipType::Chip28C16 {
-                        return Err(Error::InvalidConfig {
-                            error: "Fire CPU serving mode is not supported with 28C16".to_string(),
+            if let Some(overrides) = chip_set_config.firmware_overrides.as_ref()
+                && let Some(fire) = overrides.fire.as_ref()
+                && fire.serve_mode == Some(FireServeMode::Cpu)
+            {
+                if props.board().chip_pins() != 24 {
+                    return Err(Error::InvalidConfig {
+                        error: "Fire CPU serving mode is only supported on One ROM 24".to_string(),
+                    });
+                } else if chip_set_config.chips[0].chip_type == ChipType::Chip28C16 {
+                    return Err(Error::InvalidConfig {
+                        error: "Fire CPU serving mode is not supported with 28C16".to_string(),
                     });
                 }
             }

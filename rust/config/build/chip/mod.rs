@@ -664,6 +664,9 @@ fn generate_chip_type_impl(config: &ChipTypesConfig) -> String {
 
     code.push_str("impl ChipType {\n");
 
+    code.push_str(&generate_const_eq(config));
+    code.push_str("\n\n");
+
     code.push_str(&generate_try_from_str(config));
     code.push_str("\n\n");
 
@@ -725,6 +728,15 @@ fn generate_chip_type_impl(config: &ChipTypesConfig) -> String {
     code.push_str("    }\n");
     code.push_str("}\n");
 
+    code
+}
+
+fn generate_const_eq(_config: &ChipTypesConfig) -> String {
+    let mut code = String::new();
+    code.push_str("    /// Const-compatible equality check\n");
+    code.push_str("    pub const fn eq(&self, other: &ChipType) -> bool {\n");
+    code.push_str("        *self as u8 == *other as u8\n");
+    code.push_str("    }\n");
     code
 }
 

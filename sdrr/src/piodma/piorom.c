@@ -1615,6 +1615,16 @@ static void piorom_finish_config(
             config->invert_cs[0] = 0;
         }
     }
+    if ((rom->rom_type == CHIP_TYPE_2364) && (info->pins->chip_pins == 28)) {
+        // Special case the 2364 on 28 pin ROM case:
+        // - Use A16 as the CS pins, and invert it if required.
+        config->cs_base_pin = info->pins->addr2[0];
+        if (rom->cs1_state == CS_ACTIVE_HIGH) {
+            config->invert_cs[0] = 1;
+        } else {
+            config->invert_cs[0] = 0;
+        }
+    }
 
     // Figure out base address pin from SDRR info
     uint32_t img_size = set->size;

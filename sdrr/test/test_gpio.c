@@ -101,6 +101,9 @@ static void get_gpio_drive_from_addr_cs(
                 }
                 num_addr_bits--;
             }
+        } else if (rom_type == CHIP_TYPE_2364 && sdrr_info.pins->chip_pins == 28) {
+            local_addr_pins[11] = sdrr_info.pins->cs1;    // 231024 CS1 -> 2364 A11
+            local_addr_pins[12] = addr_pins[11];           // 231024 A11 -> 2364 A12
         }
 
         for (int ii = 0; ii < num_addr_bits; ii++) {
@@ -122,6 +125,13 @@ static void get_gpio_drive_from_addr_cs(
     uint8_t oe_pin = sdrr_info.pins->oe;
     uint8_t ce_pin = sdrr_info.pins->ce;
     switch (rom_type) {
+        case CHIP_TYPE_2364:
+            if (sdrr_info.pins->chip_pins == 28) {
+                // Special case the 2364 on 28 pin ROM
+                cs1_pin = sdrr_info.pins->addr2[0];
+            }
+            break;
+
         case CHIP_TYPE_2316:
         case CHIP_TYPE_2704:
         case CHIP_TYPE_2708:

@@ -53,6 +53,9 @@ static void init_address_mangler(
             mangler->cs1_pin = config->mcu.pins.cs1.pin_2364;
             mangler->cs2_pin = config->mcu.pins.cs2.pin_2364;
             mangler->cs3_pin = config->mcu.pins.cs3.pin_2364;
+            if (config->rom.pin_count == 28) {
+                mangler->cs1_pin = config->mcu.pins.addr[16];
+            }
             break;
 
         case CHIP_TYPE_23128:
@@ -197,11 +200,9 @@ static void init_address_mangler(
         uint8_t temp = address_mangler.addr_pins[14];
         address_mangler.addr_pins[14] = address_mangler.addr_pins[15];
         address_mangler.addr_pins[15] = temp;
-    }
-
-    // Special case for 32 pin ROMs, the 27C301.  It has A16 after all the
-    // other pins, not at the beginning
-    if (rom_type == CHIP_TYPE_27C301) {
+    } else if (rom_type == CHIP_TYPE_27C301) {
+        // Special case for 32 pin ROMs, the 27C301.  It has A16 after all the
+        // other pins, not at the beginning
         // Find the max address pin
         uint8_t max_addr_pin = 0;
         for (int ii = 0; ii < MAX_ADDR_LINES; ii++) {
@@ -212,6 +213,10 @@ static void init_address_mangler(
             }
         }
         address_mangler.addr_pins[16] = max_addr_pin + 1; // A16 is the next pin after the max address pin
+    } else if (rom_type == CHIP_TYPE_2364 && config->rom.pin_count == 28) {
+        uint8_t pin_a11 = address_mangler.addr_pins[11];
+        address_mangler.addr_pins[11] = config->mcu.pins.cs1.pin_231024;
+        address_mangler.addr_pins[12] = pin_a11;
     }
 
     address_mangler.x1_pin = config->mcu.pins.x1;
@@ -259,8 +264,8 @@ void create_address_mangler(const json_config_t* config, const sdrr_rom_type_t r
         uint8_t min_pin = 255;
         uint8_t max_pins;
 
-        // <231024 have 16 pins, 231024 has 18 pins
-        if (rom_type == CHIP_TYPE_231024) {
+        // <231024 have 16 pins, 231024/2364 has 18 pins
+        if (rom_type == CHIP_TYPE_231024 || rom_type == CHIP_TYPE_2364) {
             max_pins = 18;
         } else {
             max_pins = 16;
@@ -278,7 +283,7 @@ void create_address_mangler(const json_config_t* config, const sdrr_rom_type_t r
             }
         }
 
-        if (rom_type == CHIP_TYPE_231024) {
+        if (rom_type == CHIP_TYPE_231024 || rom_type == CHIP_TYPE_2364) {
             if (address_mangler.cs1_pin != 255 && address_mangler.cs1_pin < min_pin) {
                 min_pin = address_mangler.cs1_pin;
             }

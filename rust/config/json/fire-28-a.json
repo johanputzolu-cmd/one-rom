@@ -7,7 +7,10 @@
         "pins": {
             "quantity": 28
         },
-        "bit_modes": ["8"]
+        "bit_modes": ["8"],
+        "extra_types": [
+            "2364"
+        ]
     },
     "mcu": {
         "family": "rp2350",

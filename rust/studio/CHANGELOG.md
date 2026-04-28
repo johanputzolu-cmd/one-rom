@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.18 - 2026-??-??
+
+- Add 2364 support on One ROM 28 boards.
+
 ## v0.1.17 - 2026-04-02
 
 - Add 27C080, 28C16, 28C64, 28C256 and 28C512 ROM support.

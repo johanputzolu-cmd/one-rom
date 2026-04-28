@@ -858,8 +858,11 @@ impl ChipSet {
                 } else {
                     // This firmware supports 18 address pins, but only the
                     // first 16 are used for chip types other than 231024.
+                    // The 2364 is served as a 231024 by the firmware, so uses
+                    // the same image size.
                     assert!(num_addr_pins == 18);
                     match chip.chip_type() {
+                        ChipType::Chip2364 => 2_usize.pow(18),   // 256KB
                         ChipType::Chip231024 => 2_usize.pow(18), // 256KB
                         _ => 2_usize.pow(16),                    // 64KB
                     }
@@ -1387,7 +1390,7 @@ impl ChipSet {
 // as these are CS lines, which aren't used as address lines, except for the
 // 231024.
 fn handle_snowflake_chip_types(
-    _board: &Board,
+    board: &Board,
     phys_pin_to_addr_map: &[Option<usize>],
     chip_type: &ChipType,
 ) -> Vec<Option<usize>> {
@@ -1404,6 +1407,31 @@ fn handle_snowflake_chip_types(
             // internal error and implies a board has been added supporting
             // the 2732 but without pins A11 and/or A12.
         }
+    } else if board.chip_pins() == 28 && *chip_type == ChipType::Chip2364 {
+        // When serving a 2364 from a 28 pin board, A16 and /CE are transposed
+        let ce_pin = board.bit_ce(ChipType::Chip2764) as usize;
+        if let Some(i16) = modified_map.iter().position(|&x| x == Some(16)) {
+            modified_map.swap(i16, ce_pin);
+        } else {
+            panic!(
+                "Address line A16 not found in phys_pin_to_addr_map for 2364-in-28-pin handling"
+            );
+        }
+
+        // And CS1 is A11, and A11 is A12.
+        let cs1_pin = board.bit_cs1(ChipType::Chip231024) as usize;
+        let i11 = modified_map
+            .iter()
+            .position(|&x| x == Some(11))
+            .expect("A11 not found for 2364-in-28-pin handling");
+        let i12 = modified_map
+            .iter()
+            .position(|&x| x == Some(12))
+            .expect("A12 not found for 2364-in-28-pin handling");
+        let old_cs1 = modified_map[cs1_pin];
+        modified_map[cs1_pin] = Some(11);
+        modified_map[i11] = Some(12);
+        modified_map[i12] = old_cs1;
     } else if chip_type.chip_pins() == 28 && *chip_type != ChipType::Chip231024 {
         // Remove first two entries, and add two Nones on the end.
         modified_map.remove(0);

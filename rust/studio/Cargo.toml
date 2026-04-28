@@ -1,6 +1,6 @@
 [package]
 name = "onerom-studio"
-version = "0.1.17"
+version = "0.1.18"
 edition = "2024"
 authors = ["Piers Finlayson <piers@piers.rocks>"]
 license = "MIT"
@@ -61,10 +61,10 @@ assets = [
 ]
 
 [dependencies]
-onerom-config = { path="../config", version = "0.4.7", features = ["schemars"] }
-onerom-fw = { path="../fw", version = "0.1.18" }
-onerom-gen = { path="../gen", version = "0.5.6" }
-sdrr-fw-parser = { path="../sdrr-fw-parser", version = "0.6.9" }
+onerom-config = { path="../config", version = "0.4.8", features = ["schemars"] }
+onerom-fw = { path="../fw", version = "0.1.19" }
+onerom-gen = { path="../gen", version = "0.5.7" }
+sdrr-fw-parser = { path="../sdrr-fw-parser", version = "0.6.10" }
 dfu-rs = { git = "https://github.com/piersfinlayson/dfu-rs.git", version = "0.2.0" }
 picoboot = { version = "0.2.3" }
 

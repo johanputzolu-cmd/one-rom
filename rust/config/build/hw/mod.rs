@@ -483,6 +483,9 @@ fn generate_hw_config_impl(configs: &[HwConfigData]) -> String {
     code.push_str(&generate_supported_chip_type_names_method(configs));
     code.push_str("\n\n");
 
+    code.push_str(&generate_extra_chip_types(configs));
+    code.push_str("\n\n");
+
     code.push_str("}\n");
     code
 }
@@ -1277,16 +1280,25 @@ fn generate_supports_chip_type_method(_configs: &[HwConfigData]) -> String {
     let mut code = String::new();
 
     code.push_str("    /// Check if this board supports a given Chip type\n");
-    code.push_str("    /// All boards support plugin types\n");
     code.push_str("    pub const fn supports_chip_type(&self, chip_type: ChipType) -> bool {\n");
     code.push_str("        if chip_type.is_plugin() {\n");
     code.push_str("            return true;\n");
     code.push_str("        }\n");
-    code.push_str("        let board_pins = self.chip_pins();\n");
-    code.push_str("        let chip_pins = chip_type.chip_pins();\n");
-    code.push_str("        chip_type.is_supported() && (chip_pins == board_pins)\n");
+    code.push_str(
+        "        if chip_type.is_supported() && chip_type.chip_pins() == self.chip_pins() {\n",
+    );
+    code.push_str("            return true;\n");
+    code.push_str("        }\n");
+    code.push_str("        let extras = self.extra_chip_types();\n");
+    code.push_str("        let mut i = 0;\n");
+    code.push_str("        while i < extras.len() {\n");
+    code.push_str("            if extras[i].eq(&chip_type) {\n");
+    code.push_str("                return true;\n");
+    code.push_str("            }\n");
+    code.push_str("            i += 1;\n");
+    code.push_str("        }\n");
+    code.push_str("        false\n");
     code.push_str("    }");
-
     code
 }
 
@@ -1462,5 +1474,34 @@ fn generate_supported_chip_type_names_method(_configs: &[HwConfigData]) -> Strin
     code.push_str("        }\n");
     code.push_str("    }");
 
+    code
+}
+
+fn generate_extra_chip_types(configs: &[HwConfigData]) -> String {
+    let mut code = String::new();
+
+    code.push_str("    /// Get extra chip types supported beyond this board's nominal pin count\n");
+    code.push_str("    pub const fn extra_chip_types(&self) -> &'static [ChipType] {\n");
+    code.push_str("        match self {\n");
+
+    for config in configs {
+        if let Some(extra_types) = &config.config.chip.extra_types
+            && !extra_types.is_empty()
+        {
+            let types_str = extra_types
+                .iter()
+                .map(|t| format!("ChipType::Chip{}", t))
+                .collect::<Vec<_>>()
+                .join(", ");
+            code.push_str(&format!(
+                "            Board::{} => &[{}],\n",
+                config.variant_name, types_str
+            ));
+        }
+    }
+
+    code.push_str("            _ => &[],\n");
+    code.push_str("        }\n");
+    code.push_str("    }");
     code
 }
