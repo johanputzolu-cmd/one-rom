@@ -603,6 +603,10 @@ static bool exec_get_flash_slot_info_all(uint8_t slot) {
         // Whole records are 32 bytes; the trailing partial record is however
         // many bytes remain in the data section.
         uint32_t bytes = (i < whole_count) ? 32u : partial_bytes;
+        if (i == whole_count) {
+            // Partial record: force null terminator at the truncation point.
+            record[partial_bytes - 1] = 0x00u;
+        }
         data_write(slot, data_off, record, bytes);
         data_off += bytes;
     }
