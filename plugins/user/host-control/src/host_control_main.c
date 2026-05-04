@@ -83,7 +83,7 @@ const uint8_t protocol_version[4] = {
     0u
 };
 
-#define RBCP_DEFAULT_COMPLETE   ((uint8_t)0xAAu)
+#define RBCP_DEFAULT_COMPLETE   ((uint8_t)0xBBu)
 #define RBCP_DEFAULT_STATUS_OK  ((uint8_t)0xCCu)
 
 // Response header byte offsets within the back-channel region
@@ -105,12 +105,10 @@ const uint8_t protocol_version[4] = {
 
 // Control commands
 #define CMD_NOP                         0x00u
-#define CMD_CONFIG_CMD_RESP             0x01u
-#define CMD_ENTER_CMD_RESP              0x02u
-#define CMD_CONFIG_AND_ENTER_CMD_RESP   0x03u
-#define CMD_EXIT_CMD_RESP_ACK           0x04u
-#define CMD_EXIT_CMD_RESP_SILENT        0x05u
-#define CMD_SWITCH_AND_EXIT             0x06u
+#define CMD_ENTER_CMD_RESP              0x01u
+#define CMD_EXIT_CMD_RESP_ACK           0x02u
+#define CMD_EXIT_CMD_RESP_SILENT        0x03u
+#define CMD_SWITCH_AND_EXIT             0x04u
 
 // Read commands
 #define CMD_GET_FLASH_FLASH_SLOT_COUNT  0x00u
@@ -131,24 +129,12 @@ const uint8_t protocol_version[4] = {
 // Reset commands
 #define CMD_RBCP_RESET                  0xAAu
 
-// Data section sizes in bytes, indexed by RBCP size_id.  This is the size of
-// the section following the 8 byte header.
-// IDs 0x00-0x0C are protocol-defined; IDs >= 0x0D are reserved or
-// implementation-specific and are rejected by this implementation.
-static const uint32_t s_size_table[] = {
-    0u, 8u, 24u, 48u, 120u, 248u, 506u,
-    1016u, 2040u, 4088u, 8184u, 16376u, 32760u
-};
-#define SIZE_TABLE_LEN  ((uint8_t)(sizeof(s_size_table) / sizeof(s_size_table[0])))
-_Static_assert(SIZE_TABLE_LEN == 0x0D, "s_size_table must have exactly 0x0D entries = 0x00-0x0C");
-
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
 typedef struct {
-    uint8_t  location_id;   // location table index (0x00 or 0x01)
-    uint8_t  size_id;       // size table index
+    uint16_t command_page;  // command page filter during command-response mode
     uint8_t  complete;      // protocol "complete" byte value
     uint8_t  status_ok;     // protocol "status-OK" byte value
     uint32_t region_offset; // offset of back-channel region within the RAM slot
@@ -197,6 +183,8 @@ static ora_demangle_data_fn_t               s_demangle_data;
 
 // Block until the next CS-active address capture is available, then return
 // its A0-A7 as a logical byte.  Entries where CS is inactive are skipped.
+// In command-response mode, entries whose upper address bits do not match
+// the configured command page are also skipped.
 //
 // WARNING: This function blocks indefinitely.  If the host resets or crashes
 // mid-command while the plugin is waiting for an argument byte, this function
@@ -214,10 +202,9 @@ static uint8_t ring_read_byte(void) {
 
         uint32_t logical;
         if (s_demangle(phys, &logical, 1) == ORA_RESULT_OK) {
-            if (s_state.active && 
-                (logical >= s_state.cfg.region_offset) &&
-                (logical < s_state.cfg.region_end)) {
-                // Ignore accesses to the back-channel region.
+            if (s_state.active &&
+                ((logical >> 8u) != (uint32_t)s_state.cfg.command_page)) {
+                // Ignore accesses that do not match the command page.
                 continue;
             }
             return (uint8_t)(logical & 0xFFu);
@@ -304,12 +291,12 @@ static void data_write(
 // Steps 1-3: set progress=pending, increment token, update last_cmd.
 static void cmd_begin(uint8_t slot, uint8_t group, uint8_t cmd) {
     hdr_write(slot, HDR_PROGRESS, pending_val(), false);
-    hdr_write(slot, HDR_LAST_CMD_GROUP, group, false);
-    hdr_write(slot, HDR_LAST_CMD_CMD, cmd, false);
     s_state.token_lsb++;
     if (s_state.token_lsb == 0u) s_state.token_msb++;
     hdr_write(slot, HDR_TOKEN_LSB, s_state.token_lsb, false);
     hdr_write(slot, HDR_TOKEN_MSB, s_state.token_msb, false);
+    hdr_write(slot, HDR_LAST_CMD_GROUP, group, false);
+    hdr_write(slot, HDR_LAST_CMD_CMD, cmd, false);
 }
 
 // Steps 5-6: write response field then set progress=complete.
@@ -324,28 +311,6 @@ static void cmd_end(uint8_t slot, bool ok) {
 // ---------------------------------------------------------------------------
 // Back-channel region setup
 // ---------------------------------------------------------------------------
-
-// Compute the slot byte offset of the back-channel region from the location
-// table index and size table index.
-static ora_result_t compute_region_offset(uint8_t location_id, uint8_t size_id,
-                                           uint8_t active_slot,
-                                           uint32_t *offset_out) {
-    if (location_id == 0x00u) {
-        *offset_out = 0u;
-        return ORA_RESULT_OK;
-    }
-    if (location_id == 0x01u) {
-        uint32_t addr, slot_size;
-        ora_result_t r = s_get_ram_slot_info(active_slot, &addr, &slot_size, NULL);
-        if (r != ORA_RESULT_OK) return r;
-        uint32_t data_size = (size_id < SIZE_TABLE_LEN) ? s_size_table[size_id] : 0u;
-        *offset_out = slot_size - (HDR_SIZE + data_size);
-        return ORA_RESULT_OK;
-    }
-    // location IDs 0x02-0x7F reserved; 0x80-0xFF implementation-specific:
-    // not supported by this implementation.
-    return ORA_RESULT_INVALID_ARG;
-}
 
 // Zero-initialise the response header in the back-channel region.
 static void init_back_channel(uint8_t slot) {
@@ -372,8 +337,7 @@ static void init_rbcp(bool reset_slot_info) {
     // Initialise device state with protocol defaults
     s_state.active              = false;
     s_state.active_slot         = 0u;
-    s_state.cfg.location_id     = 0x00u;
-    s_state.cfg.size_id         = 0x00u;
+    s_state.cfg.command_page    = 0u;
     s_state.cfg.complete        = RBCP_DEFAULT_COMPLETE;
     s_state.cfg.status_ok       = RBCP_DEFAULT_STATUS_OK;
     s_state.cfg.region_offset   = 0u;
@@ -395,82 +359,44 @@ static bool exec_nop(void) {
     return true;
 }
 
-// Configures command-response mode parameters.  May be called in either
-// command or command-response mode.
-//
-// Note: region_offset is NOT recomputed here even if called mid-session.
-// New location and size parameters take effect only at the next
-// ENTER_CMD_RESP.  Recomputing region_offset mid-session would invalidate the
-// host's current polling location, which is more dangerous than deferring.
-// Same goes for region_end.
-static bool exec_config_cmd_resp(void) {
-    uint8_t location  = ring_read_byte();
-    uint8_t size_id   = ring_read_byte();
-    uint8_t complete  = ring_read_byte();
-    uint8_t status_ok = ring_read_byte();
-
-    s_log("CONFIG_CMD_RESP: loc=0x%02X, sz=0x%02X, cplt=0x%02X, stok=0x%02X",
-          (unsigned)location, (unsigned)size_id, complete, status_ok);
-
-    if (s_state.active) {
-        s_log("CONFIG_CMD_RESP failed: cannot reconfigure while active");
-        return false;
-    }
-    if (size_id >= SIZE_TABLE_LEN) {
-        s_log("CONFIG_CMD_RESP failed: invalid size_id 0x%02X", (unsigned)size_id);
-        return false;
-    }
-    if (location > 0x01u) {
-        s_log("CONFIG_CMD_RESP failed: invalid location 0x%02X", (unsigned)location);
-        return false;
-    }
-
-    uint8_t active_slot;
-    if (s_get_active_ram_slot(&active_slot) != ORA_RESULT_OK) {
-        s_log("CONFIG_CMD_RESP failed: no active slot");
-        return false;
-    }
-    uint32_t slot_size;
-    if (s_get_ram_slot_info(active_slot, NULL, &slot_size, NULL) != ORA_RESULT_OK) {
-        s_log("CONFIG_CMD_RESP failed: get_ram_slot_info error");
-        return false;
-    }
-    uint32_t offset;
-    if (compute_region_offset(location, size_id, active_slot, &offset) != ORA_RESULT_OK) {
-        s_log("CONFIG_CMD_RESP failed: invalid location");
-        return false;
-    }
-    uint32_t data_size = s_size_table[size_id];
-    if (offset + HDR_SIZE + data_size > slot_size) {
-        s_log("CONFIG_CMD_RESP failed: region exceeds slot size");
-        return false;
-    }
-
-    s_state.cfg.location_id = location;
-    s_state.cfg.size_id     = size_id;
-    s_state.cfg.complete    = complete;
-    s_state.cfg.status_ok   = status_ok;
-    s_state.cfg.data_size   = s_size_table[size_id];
-
-    s_log("CONFIG_CMD_RESP succeeded: data_size=0x%u", (unsigned)s_state.cfg.data_size);
-    return true;
-}
-
-// Transitions into Command-Response mode.  Queries and caches the active RAM
-// slot, initialises the back-channel region, and resets the token.  If
-// already active, succeeds immediately (idempotent).
-//
-// The active slot is cached in s_state.active_slot for the lifetime of the
-// session.  All subsequent back-channel writes use the cached value, removing
-// the need for repeated get_active_ram_slot() calls and ensuring a valid slot
-// is always available.  The cache is updated by CMD_SWITCH_SLOT if the host
-// switches slot mid-session; CMD_SWITCH_AND_EXIT does not update it as that
-// command exits silently with no writes to the new slot.
+// Configures command-response mode parameters and enters command-response mode.
+// Reads 9 argument bytes.  Validates all arguments before making any state
+// changes.  Silent-discard conditions (as defined by the spec) are logged but
+// produce no back-channel response.  Failure conditions are also logged; since
+// ENTER_CMD_RESP is only valid in command mode, there is no back-channel for
+// the device to write a failure response to — both outcomes are invisible to
+// the host, which detects failure by the token not incrementing.
 static bool exec_enter_cmd_resp(void) {
-    s_log("ENTER_CMD_RESP");
+    uint8_t cp_lo     = ring_read_byte();  // A0: command page LSB
+    uint8_t cp_hi     = ring_read_byte();  // A1: command page MSB
+    uint8_t bc_a0     = ring_read_byte();  // A2: back-channel start address byte 0
+    uint8_t bc_a1     = ring_read_byte();  // A3: back-channel start address byte 1
+    uint8_t bc_a2     = ring_read_byte();  // A4: back-channel start address byte 2
+    uint8_t bc_sz_lo  = ring_read_byte();  // A5: back-channel size LSB
+    uint8_t bc_sz_hi  = ring_read_byte();  // A6: back-channel size MSB
+    uint8_t complete  = ring_read_byte(); // A7
+    uint8_t status_ok = ring_read_byte(); // A8
+
+    uint16_t command_page  = (uint16_t)cp_lo | ((uint16_t)cp_hi << 8u);
+    uint32_t region_offset = (uint32_t)bc_a0
+                           | ((uint32_t)bc_a1 << 8u)
+                           | ((uint32_t)bc_a2 << 16u);
+    uint16_t region_size   = (uint16_t)bc_sz_lo | ((uint16_t)bc_sz_hi << 8u);
 
     if (s_state.active) {
-        s_log("ENTER_CMD_RESP failed: cannot reconfigure while active");
+        s_log("ENTER_CMD_RESP failed: already in command-response mode");
+        return false;
+    }
+    if (complete == 0xAAu || status_ok == 0xAAu) {
+        s_log("ENTER_CMD_RESP discarded: complete or status_ok is 0xAA");
+        return false;
+    }
+    if (region_offset & 0x3u) {
+        s_log("ENTER_CMD_RESP discarded: back-channel start address not 4-byte aligned");
+        return false;
+    }
+    if ((uint32_t)region_size < HDR_SIZE) {
+        s_log("ENTER_CMD_RESP failed: back-channel size too small to hold header");
         return false;
     }
 
@@ -479,28 +405,47 @@ static bool exec_enter_cmd_resp(void) {
         s_log("ENTER_CMD_RESP failed: no active slot");
         return false;
     }
-
-    uint32_t offset;
-    if (compute_region_offset(s_state.cfg.location_id, s_state.cfg.size_id,
-                              active_slot, &offset) != ORA_RESULT_OK) {
-        s_log("ENTER_CMD_RESP failed: invalid back-channel region");
+    uint32_t slot_size;
+    if (s_get_ram_slot_info(active_slot, NULL, &slot_size, NULL) != ORA_RESULT_OK) {
+        s_log("ENTER_CMD_RESP failed: get_ram_slot_info error");
         return false;
     }
-    s_state.cfg.region_offset = offset;
-    s_state.cfg.region_end = offset + HDR_SIZE + s_state.cfg.data_size;
+    if (((uint32_t)command_page << 8u) >= slot_size) {
+        s_log("ENTER_CMD_RESP discarded: command page 0x%04X out of range for slot size %u",
+              (unsigned)command_page, (unsigned)slot_size);
+        return false;
+    }
+    uint32_t region_end = region_offset + (uint32_t)region_size;
+    if (region_end > slot_size) {
+        s_log("ENTER_CMD_RESP failed: back-channel region exceeds slot size");
+        return false;
+    }
+
+    // Commit region_offset early so hdr_read can use it to locate the token.
+    s_state.cfg.region_offset = region_offset;
+
     // The token must start from the value already in the back-channel region.
     if (hdr_read(active_slot, HDR_TOKEN_LSB, &s_state.token_lsb) != ORA_RESULT_OK ||
         hdr_read(active_slot, HDR_TOKEN_MSB, &s_state.token_msb) != ORA_RESULT_OK) {
         s_log("ENTER_CMD_RESP failed: could not read existing token");
         return false;
     }
-    s_log("token=0x%02X%02X", s_state.token_msb, s_state.token_lsb);
-    s_state.active_slot     = active_slot;
+    s_log("ENTER_CMD_RESP: cp=0x%04X ro=%u rsz=%u cplt=0x%02X stok=0x%02X token=0x%02X%02X",
+          (unsigned)command_page, (unsigned)region_offset, (unsigned)region_size,
+          complete, status_ok, s_state.token_msb, s_state.token_lsb);
+
+    s_state.cfg.command_page  = command_page;
+    s_state.cfg.complete      = complete;
+    s_state.cfg.status_ok     = status_ok;
+    s_state.cfg.region_end    = region_end;
+    s_state.cfg.data_size     = (uint32_t)region_size - HDR_SIZE;
+    s_state.active_slot       = active_slot;
     init_back_channel(active_slot);
     s_state.active = true;
 
     s_log("ENTER_CMD_RESP succeeded: as=%u, ro=%u, re=%u",
-          (unsigned)active_slot, (unsigned)s_state.cfg.region_offset, (unsigned)s_state.cfg.region_end);
+          (unsigned)active_slot, (unsigned)s_state.cfg.region_offset,
+          (unsigned)s_state.cfg.region_end);
     return true;
 }
 
@@ -547,6 +492,11 @@ static bool exec_get_flash_slot_info(uint8_t ram_slot) {
     uint8_t flash_slot = ring_read_byte();
 
     s_log("GET_FLASH_SLOT_INFO: flash_slot=%u", (unsigned)flash_slot);
+
+    if (flash_slot == 0xAA) {
+        s_log("GET_FLASH_SLOT_INFO failed: flash_slot value 0xAA is reserved");
+        return false;
+    }
 
     uint32_t space = s_state.cfg.data_size;
     if (space < 32u) {
@@ -664,14 +614,19 @@ static bool exec_get_protocol_version(void) {
 }
 
 static bool exec_slot_peek(void) {
-    uint8_t target = ring_read_byte();
     uint8_t a0     = ring_read_byte();
     uint8_t a1     = ring_read_byte();
     uint8_t a2     = ring_read_byte();
     uint8_t count  = ring_read_byte();
+    uint8_t target = ring_read_byte();
 
     s_log("SLOT_PEEK: tgt=%u a0=0x%02X a1=0x%02X a2=0x%02X ct=%u",
           (unsigned)target, (unsigned)a0, (unsigned)a1, (unsigned)a2, (unsigned)count);
+
+    if (target == 0xAAu) {
+        s_log("SLOT_PEEK failed: target value 0xAA is reserved");
+        return false;
+    }
 
     uint32_t addr       = (uint32_t)a0
                         | ((uint32_t)a1 << 8u)
@@ -727,11 +682,16 @@ static bool exec_slot_peek(void) {
 // ---------------------------------------------------------------------------
 
 static bool exec_slot_poke(void) {
-    uint8_t target = ring_read_byte();
     uint8_t a0     = ring_read_byte();
     uint8_t a1     = ring_read_byte();
     uint8_t a2     = ring_read_byte();
     uint8_t byte   = ring_read_byte();
+    uint8_t target = ring_read_byte();
+
+    if (target == 0xAAu) {
+        s_log("SLOT_POKE failed: target value 0xAA is reserved");
+        return false;
+    }
 
     uint32_t addr = (uint32_t)a0
                   | ((uint32_t)a1 << 8u)
@@ -741,6 +701,12 @@ static bool exec_slot_poke(void) {
 
 static bool exec_switch_slot(void) {
     uint8_t target = ring_read_byte();
+
+    if (target == 0xAAu) {
+        s_log("SWITCH_SLOT failed: target value 0xAA is reserved");
+        return false;
+    }
+
     s_log("SWITCH_SLOT: target=%u", (unsigned)target);
     return (s_set_active_ram_slot(target) == ORA_RESULT_OK);
 }
@@ -748,7 +714,14 @@ static bool exec_switch_slot(void) {
 static bool exec_load_slot(void) {
     uint8_t ram_slot   = ring_read_byte();
     uint8_t flash_slot = ring_read_byte();
+
     s_log("LOAD_SLOT: ram_slot=%u flash_slot=%u", (unsigned)ram_slot, (unsigned)flash_slot);
+
+    if ((ram_slot == 0xAAu) || (flash_slot == 0xAAu)) {
+        s_log("LOAD_SLOT failed: slot value 0xAA is reserved");
+        return false;
+    }
+
     ora_result_t rc = s_copy_flash_to_ram(
         flash_slot,
         ORA_FLASH_SLOT_FLAG_EXCLUDE_PLUGINS,
@@ -763,8 +736,13 @@ static bool exec_load_slot(void) {
 }
 
 static bool exec_slot_poke_all_byte(void) {
-    uint8_t target = ring_read_byte();
     uint8_t byte     = ring_read_byte();
+    uint8_t target = ring_read_byte();
+
+    if (target == 0xAAu) {
+        s_log("SLOT_POKE_ALL_BYTE failed: target value 0xAA is reserved");
+        return false;
+    }
 
     uint32_t rom_type = 0xFFu;
     if (s_get_ram_slot_info(target, NULL, NULL, &rom_type) != ORA_RESULT_OK) {
@@ -811,17 +789,8 @@ static bool dispatch(
                 case CMD_NOP:
                     ok = exec_nop();
                     break;
-                case CMD_CONFIG_CMD_RESP:
-                    ok = exec_config_cmd_resp();
-                    break;
                 case CMD_ENTER_CMD_RESP:
                     ok = exec_enter_cmd_resp();
-                    break;
-                case CMD_CONFIG_AND_ENTER_CMD_RESP:
-                    ok = exec_config_cmd_resp();
-                    if (ok) {
-                        ok = exec_enter_cmd_resp();
-                    }
                     break;
                 case CMD_EXIT_CMD_RESP_ACK:
                     // The device completes the full command processing sequence
