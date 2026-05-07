@@ -118,6 +118,13 @@
  * - The plugin is run from flash, as one some One ROMs there simply isn't
  *   enough RAM to load meaningful amounts of code into RAM.  However, your
  *   plugin could load itself into RAM, and jump to it there. 
+ * 
+ * - Plugins may need to co-exist on the same One ROM.  From time to time, a
+ *   plugin might need exclusive access to the device, for example, to erase
+ *   and/or reprogram flash.  APIs are provided to allow a plugin to request
+ *   and release exclusive access, and also to check if it should yield
+ *   (pause) to allow the other plugin to gain exclusive access.  A plugin
+ *   can indicate that it supports periodic yielding using the plugin header.
  */
 
 #ifndef ORA_PLUGIN_H
