@@ -14,21 +14,21 @@ This support is implemented using the new `user/host-control` plugin, which is a
 
 This version of the plugin and core firmware focuses on enabling RBCP for 2364 ROMs, including 2364/2364/2332 multi-ROM sets, like those used in the C64 to serve all of basic, kernal and character ROMs from a single One ROM 24.  Support for other ROM types and configurations is expected in future releases.
 
-In order to support this functionality, this release also includes a number of other changes, including substantial new plugin API functions.
+In order to support this functionality, this release also includes a number of other changes, including a substantial number of new plugin API functions.  Noteworthy additions include functions to:
+- collect addresses read by the host and detect "knocks" (a specific sequence of address reads) on behalf of the plugin.
+- Fpopulate and switch to additional backup RAM "slots" allowing dynamic, atomic switching between ROM images.
+- allow co-operation between plugins, to allow one plugin to suspend the other, in order to perform operations that might interfere with the other plugin's operation, such as flash erasing/writing.
 
-There are a few non-backwards compatible plugin API changes:
-- ORA_RING_BUF_DECLARE() has been removed and replaced with _8BIT(), _16BIT() and _32BIT() variants
-- setup_address_monitor() and init_knock() have gained a data_size argument, which must be aligned with the ORA_RING_BUF_DECLARE variant used
-- wait_for_knock() has gained additional optional arguments to allow a plugin more control over the knock behaviour
+It is believed that no non-backwards compatible changes to the plugin API have been introduced in this release, so plugins developed to older versions of the firmware should still work.  This includes the system/usb plugin.  However, there remain no guarantees of backwards compatibility for the plugin API in future releases, so if you are developing a plugin, please keep an eye on this changelog for any changes that might impact your plugin.
 
 Also added:
 - 2364, 2732, 2716, 2708 and 2704 support on One ROM 28 boards.  Important notes:
   - One ROM 28's pin 28 or the 5V header pin MUST be supplied 5V when using to emulate these 24 pin ROM types.  Failure to do this is likely to damage One ROM.
-  - If your system expects a 24 pin ROM of one of these types and provides a 28 pin socket, you can probably install a 28 pin One ROM as is.
-  - If you want to use a One ROM 28 in a 24 pin socket as one of these ROM types, you must install One ROM 28's pins 3-26 in that socket (i.e. install the "bottom" of the One ROM in the 24 pin socket, leaving the top two rows of pins overhanging the top of the socket).  And you MUST supply pin 28 with 5V, either via pin 28, or via the 5V header pin.  Failure to do this is likely to damage One ROM.
-  - When emulating a 2704 or 2708 you MUST ensure that any -5V, -12V or +12V (or any voltages other that +5V) are NOT supplied to One ROM.  This can be achieved by cutting traces on the system's PCB, or not populating the appropriate One ROM pins.
+  - If your system expects a 24 pin ROM of one of these types and provides a 28 pin socket, you can probably install a 28 pin One ROM as is.  Double check pin 28 supplies 5V.
+  - If you want to use a One ROM 28 in a 24 pin socket as one of these ROM types, you must install One ROM 28's pins 3-26 in that socket, with pin 3 of One ROM in the socket's pin 1 (i.e. install the "bottom" of the One ROM in the 24 pin socket, leaving the top two rows of pins overhanging the top of the socket).  You MUST supply pin 28 with 5V, either via pin 28, or via the 5V header pin.  Failure to do this is likely to damage your One ROM.
+  - When emulating a 2704 or 2708 you MUST ensure that any -5V, -12V or +12V (or any voltages other that +5V) are NOT supplied to One ROM.  This can be achieved by cutting traces on the system's PCB, or not populating (or de-populating) the appropriate One ROM pins.
   - This support was tested as follows:
-    - Both test and test-pio scenarios have been added to CI and pass.
+    - Both test and test-pio scenarios for all these ROM types have been added to CI and pass.
     - 2364 support was tested in a C64 breadbin as the kernal ROM.
     - 2732/2716 were tested in a T48 EPROM reader (with Pin Detect disabled).
     - 2708/2704 are untested, as the T48 doesn't support these types.  The 2704/2708 support is very similar to the 2716 support, so is expected to work, but please report any issues if you try it.
