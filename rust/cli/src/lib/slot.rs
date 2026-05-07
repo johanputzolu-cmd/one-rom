@@ -299,7 +299,7 @@ fn parse_slot(slot: &str, board: &Board) -> Result<SlotSpec, Error> {
         Error::UnsupportedChipType(chip_type_str.clone(), supported)
     })?;
 
-    if !board.supports_chip_type(chip_type) {
+    if !board.supports_chip_type(chip_type) && !board.extra_chip_types().contains(&chip_type){
         let supported = supported_chip_names_for_board(board);
         return Err(Error::UnsupportedBoardChipType(
             chip_type.name().to_string(),

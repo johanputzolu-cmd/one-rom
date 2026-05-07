@@ -22,7 +22,16 @@ There are a few non-backwards compatible plugin API changes:
 - wait_for_knock() has gained additional optional arguments to allow a plugin more control over the knock behaviour
 
 Also added:
-- 2364 support on One ROM 28 boards.
+- 2364, 2732, 2716, 2708 and 2704 support on One ROM 28 boards.  Important notes:
+  - One ROM 28's pin 28 or the 5V header pin MUST be supplied 5V when using to emulate these 24 pin ROM types.  Failure to do this is likely to damage One ROM.
+  - If your system expects a 24 pin ROM of one of these types and provides a 28 pin socket, you can probably install a 28 pin One ROM as is.
+  - If you want to use a One ROM 28 in a 24 pin socket as one of these ROM types, you must install One ROM 28's pins 3-26 in that socket (i.e. install the "bottom" of the One ROM in the 24 pin socket, leaving the top two rows of pins overhanging the top of the socket).  And you MUST supply pin 28 with 5V, either via pin 28, or via the 5V header pin.  Failure to do this is likely to damage One ROM.
+  - When emulating a 2704 or 2708 you MUST ensure that any -5V, -12V or +12V (or any voltages other that +5V) are NOT supplied to One ROM.  This can be achieved by cutting traces on the system's PCB, or not populating the appropriate One ROM pins.
+  - This support was tested as follows:
+    - Both test and test-pio scenarios have been added to CI and pass.
+    - 2364 support was tested in a C64 breadbin as the kernal ROM.
+    - 2732/2716 were tested in a T48 EPROM reader (with Pin Detect disabled).
+    - 2708/2704 are untested, as the T48 doesn't support these types.  The 2704/2708 support is very similar to the 2716 support, so is expected to work, but please report any issues if you try it.
 
 ## v0.6.8 - 2026-04-02
 

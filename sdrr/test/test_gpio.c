@@ -66,7 +66,7 @@ static void get_gpio_drive_from_addr_cs(
         memcpy(local_addr_pins, addr_pins, sizeof(local_addr_pins));
 
         // Handle any ROM type uniqueness
-        if (rom_type == CHIP_TYPE_2732) {
+        if (rom_type == CHIP_TYPE_2732 && sdrr_info.pins->chip_pins == 24) {
             // Swap pins A11 and A12
             uint8_t temp = local_addr_pins[11];
             local_addr_pins[11] = local_addr_pins[12];
@@ -133,13 +133,21 @@ static void get_gpio_drive_from_addr_cs(
             break;
 
         case CHIP_TYPE_2316:
+            // Flip CS2 and CS3 pin for all 24 pin ROMs except 2332 and 2364
+            cs2_pin = sdrr_info.pins->cs3;
+            cs3_pin = sdrr_info.pins->cs2;
+            break;
+
         case CHIP_TYPE_2704:
         case CHIP_TYPE_2708:
         case CHIP_TYPE_2716:
         case CHIP_TYPE_2732:
-            // Flip CS2 and CS3 pin for all 24 pin ROMs except 2332 and 2364
-            cs2_pin = sdrr_info.pins->cs3;
-            cs3_pin = sdrr_info.pins->cs2;
+        case CHIP_TYPE_2764:
+            if (sdrr_info.pins->chip_pins == 24) {
+                // Flip CS2 and CS3 pin for all 24 pin ROMs except 2332 and 2364
+                cs2_pin = sdrr_info.pins->cs3;
+                cs3_pin = sdrr_info.pins->cs2;
+            }
             break;
 
         // Some cases are missing here.  Thats because /OE/CE share pins with

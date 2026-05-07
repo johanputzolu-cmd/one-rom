@@ -244,7 +244,7 @@ static int test_set(uint8_t set_index) {
     // Run the firmware - it will return when it hits the infinite loop.
     firmware_main();
 
-        // Re-instate stdout and close the log file
+    // Re-instate stdout and close the log file
     TST_LOG_RESET_STDOUT();
 
     if (limp_mode_value != LIMP_MODE_NONE) {

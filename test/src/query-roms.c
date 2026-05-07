@@ -82,21 +82,37 @@ static void init_address_mangler(
         case CHIP_TYPE_2704:
             mangler->cs1_pin = config->mcu.pins.ce.pin_2704;
             mangler->cs2_pin = config->mcu.pins.oe.pin_2704;
+            if (config->rom.pin_count == 28) {
+                mangler->cs1_pin = config->mcu.pins.ce.pin_2764;
+                mangler->cs2_pin = config->mcu.pins.ce.pin_2764;
+            }
             break;
 
         case CHIP_TYPE_2708:
             mangler->cs1_pin = config->mcu.pins.ce.pin_2708;
             mangler->cs2_pin = config->mcu.pins.oe.pin_2708;
+            if (config->rom.pin_count == 28) {
+                mangler->cs1_pin = config->mcu.pins.ce.pin_2764;
+                mangler->cs2_pin = config->mcu.pins.ce.pin_2764;
+            }
             break;
 
         case CHIP_TYPE_2716:
             mangler->cs1_pin = config->mcu.pins.ce.pin_2716;
             mangler->cs2_pin = config->mcu.pins.oe.pin_2716;
+            if (config->rom.pin_count == 28) {
+                mangler->cs1_pin = config->mcu.pins.ce.pin_2764;
+                mangler->cs2_pin = config->mcu.pins.ce.pin_2764;
+            }
             break;
 
         case CHIP_TYPE_2732:
             mangler->cs1_pin = config->mcu.pins.ce.pin_2732;
             mangler->cs2_pin = config->mcu.pins.oe.pin_2732;
+            if (config->rom.pin_count == 28) {
+                mangler->cs1_pin = config->mcu.pins.ce.pin_2764;
+                mangler->cs2_pin = config->mcu.pins.ce.pin_2764;
+            }
             break;
 
         case CHIP_TYPE_2764:
@@ -186,7 +202,7 @@ static void init_address_mangler(
     // There is a special case for 24 pin ROMs - the 2732.  It has A11 as pin
     // 21, whereas the other ROM types have it at pin 18.  For the 2732
     // therefore we swap the A11 and A12 pins.
-    if (rom_type == CHIP_TYPE_2732) {
+    if ((rom_type == CHIP_TYPE_2732) && (config->rom.pin_count == 24)) {
         // Find logical A11 and A12 pins
         uint8_t pin_a11 = address_mangler.addr_pins[11];
         uint8_t pin_a12 = address_mangler.addr_pins[12];

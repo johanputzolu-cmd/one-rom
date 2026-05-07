@@ -1395,7 +1395,7 @@ fn handle_snowflake_chip_types(
     chip_type: &ChipType,
 ) -> Vec<Option<usize>> {
     let mut modified_map = phys_pin_to_addr_map.to_vec();
-    if *chip_type == ChipType::Chip2732 {
+    if board.chip_pins() == 24 && *chip_type == ChipType::Chip2732  {
         // Swap A11 and A12
         let a11_index = modified_map.iter().position(|&x| x == Some(11));
         let a12_index = modified_map.iter().position(|&x| x == Some(12));
@@ -1406,6 +1406,9 @@ fn handle_snowflake_chip_types(
             // Address lines not found as expected.  Panic, as this is an
             // internal error and implies a board has been added supporting
             // the 2732 but without pins A11 and/or A12.
+            panic!(
+                "Address lines A11 and/or A12 not found in phys_pin_to_addr_map for 2732 handling"
+            );
         }
     } else if board.chip_pins() == 28 && *chip_type == ChipType::Chip2364 {
         // When serving a 2364 from a 28 pin board, A16 and /CE are transposed
@@ -1432,7 +1435,9 @@ fn handle_snowflake_chip_types(
         modified_map[cs1_pin] = Some(11);
         modified_map[i11] = Some(12);
         modified_map[i12] = old_cs1;
-    } else if chip_type.chip_pins() == 28 && *chip_type != ChipType::Chip231024 {
+    } else if board.chip_pins() == 28 && *chip_type != ChipType::Chip231024 && *chip_type != ChipType::Chip2364 {
+        // Covers 27xx chips as well as 28 pin types
+
         // Remove first two entries, and add two Nones on the end.
         modified_map.remove(0);
         modified_map.remove(0);

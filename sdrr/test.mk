@@ -49,14 +49,16 @@ CFLAGS := -DAPIO_EMULATION=1 -DTEST_BUILD=1 \
 			-DSDRR_GIT_COMMIT=\"$(GIT_COMMIT)\" \
 			-DBOOT_LOGGING=1 -DDEBUG_LOGGING=1 \
 			-g -O0 -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
-			-MMD -MP -fshort-enums -fsanitize=address -fno-omit-frame-pointer
+			-MMD -MP -fshort-enums 
+#			-fsanitize=address -fno-omit-frame-pointer
 
 # Linker flags:
 # - fsanitize=address for debug builds
 # - segalign 0x80000 to allow 512KB alignment (for ROM RAM table)
 # - no_fixup_chains to make the 512KB alignement work on macOS
 # - no_pie to avoid position independent executable which breaks alignment on macOS
-LDFLAGS := -g -fsanitize=address 
+LDFLAGS := 
+#			-g -fsanitize=address 
 
 # Targets
 .PHONY: all clean run debug clean-apio-src apio clean-epio-src epio-src epio

@@ -1879,6 +1879,23 @@ static void piorom_force_unused_addr_pins_to_zero(
             if (info->pins->addr[12] < MAX_USED_GPIOS) {
                 APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[12]);
             }
+            if (info->pins->chip_pins == 28) {
+                // A11 is unused.
+                APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[11]);
+            }
+
+        // Fall through
+        case CHIP_TYPE_2732:
+            // For 24 pin ROMs, physical pin 21 is A11 (not A12), and is used.
+            // No NC.
+            if (info->pins->chip_pins == 28) {
+                // A12, A13, A14 and A15 are unused.  Assume these pins aren't
+                // invalid, as they shouldn't be for a 28 pin ROM
+                APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[12]);
+                APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[13]);
+                APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[14]);
+                APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[15]);
+            }
             break;
 
         case CHIP_TYPE_28C16:
@@ -1886,10 +1903,6 @@ static void piorom_force_unused_addr_pins_to_zero(
             if (info->pins->addr[12] < MAX_USED_GPIOS) {
                 APIO_GPIO_FORCE_INPUT_HIGH(info->pins->addr[12]);
             }
-            break;
-
-        case CHIP_TYPE_2732:
-            // Physical pin 21 is A11 (not A12), and is used.  No NC.
             break;
 
         case CHIP_TYPE_28C64:
