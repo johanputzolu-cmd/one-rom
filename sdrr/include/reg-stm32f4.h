@@ -26,6 +26,7 @@
 // SCB registers
 #define SCB_AIRCR       (*((volatile uint32_t *)(SCB_BASE + 0x0C)))
 #define SCB_CPACR       (*((volatile uint32_t *)(SCB_BASE + 0x88)))
+#define SCB_CPACR_ENABLE_FP (0xF << 20)
 
 // NVIC registers
 #define NVIC_ISER0      (*((volatile uint32_t*)0xE000E100))
