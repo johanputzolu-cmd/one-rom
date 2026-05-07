@@ -14,18 +14,36 @@
 // through ENTER_CMD_RESP to an explicit exit command, with all responses
 // written into the configured back-channel region of the active RAM slot.
 
+// IMPORTANT NOTE: When running with PLUGIN_LOGGING enabled in the core
+// firmware, the optimisation level of this plugin MUST be reduced.  It is
+// though that -O2/-O3 causes more stack usage and hence blowing of the stack.
+
 #include <stdint.h>
 #include <stdbool.h>
 #include "plugin.h"
+#include "flash_erase.h"
+
+#define RP235X
+#define MCU_FLASH_SIZE_KB 2048
+#define MCU_RAM_SIZE_KB 520
+#define RP2350A
+#include "enums.h"
+#include "reg-rp235x.h"
 
 // ---------------------------------------------------------------------------
 // Plugin header
 // ---------------------------------------------------------------------------
 
+// Use the simpler plugin header macro.  We do _not_ support yielding, as that
+// would interfere with knock/byte detection.
+
 ORA_DEFINE_USER_PLUGIN(
     rbcp_main,
-    0, 1, 0, 0,   // plugin version 0.1.0.0
-    0, 6, 9       // minimum firmware version 0.6.9
+    MAJOR_VERSION,
+    MINOR_VERSION,
+    PATCH_VERSION,
+    BUILD_VERSION,
+    0, 6, 9       // minimum One ROM firmware version
 );
 
 // ---------------------------------------------------------------------------
@@ -43,6 +61,9 @@ ORA_DEFINE_USER_PLUGIN(
 #define RING_BUF_TYPE       uint32_t                         // 32 bit entries
 _Static_assert(sizeof(RING_BUF_TYPE) * 8 == RING_DATA_SIZE, "RING_BUF_TYPE must match RING_DATA_SIZE");
 
+// Put the ring buffer in its own section, so it can be aligned at the start
+// of the data region, meaning we maximise the stack space.
+__attribute__((section(".ring_buf")))
 ORA_RING_BUF_DECLARE_32BIT(ring_buf, RING_ENTRIES_LOG2);
 
 #define RING_BUF_CUR_READ_INDEX()   s_read_idx
@@ -98,10 +119,11 @@ const uint8_t protocol_version[4] = {
 #define HDR_SIZE            8u
 
 // Command groups
-#define GRP_CONTROL  0x00u
-#define GRP_READ     0x01u
-#define GRP_MODIFY   0x02u
-#define GRP_RESET    0xAAu
+#define GRP_CONTROL     0x00u
+#define GRP_READ        0x01u
+#define GRP_MODIFY      0x02u
+#define GRP_NV_STORAGE  0x03u
+#define GRP_RESET       0xAAu
 
 // Control commands
 #define CMD_NOP                         0x00u
@@ -126,8 +148,28 @@ const uint8_t protocol_version[4] = {
 #define CMD_LOAD_SLOT                   0x02u
 #define CMD_SLOT_POKE_ALL_BYTE          0x03u
 
+// NV Storage commands
+#define CMD_GET_NV_CAPABILITY             0x00u
+#define CMD_NV_PEEK                     0x01u
+#define CMD_NV_POKE_BEGIN               0x02u
+#define CMD_NV_POKE                     0x03u
+#define CMD_NV_POKE_COMMIT              0x04u
+#define CMD_NV_POKE_DISCARD             0x05u
+#define CMD_NV_POKE_COMMIT_BYTE         0x06u
+
 // Reset commands
 #define CMD_RBCP_RESET                  0xAAu
+
+// NV Storage size supported by this RBCP implementation
+#define NV_STORAGE_SIZE 4096u
+_Static_assert(NV_STORAGE_SIZE <= 32768u, "Max NV_STORAGE_SIZE is 32KB per the RBCP specification");
+
+// ---------------------------------------------------------------------------
+// Linker symbols required by NV storage implementation
+// ---------------------------------------------------------------------------
+extern const uint8_t __nv_storage_start[];
+extern const uint8_t __flash_erase_fn_start[];
+extern const uint8_t __flash_erase_fn_end[];
 
 // ---------------------------------------------------------------------------
 // State
@@ -155,12 +197,21 @@ typedef struct {
                              // state changes unexpectedly after session entry.
 } rbcp_state_t;
 
+typedef struct {
+    bool     active;
+    uint8_t  staging_slot;
+    uint32_t staging_base;
+    uint32_t staging_size;
+} nv_state_t;
+
 static rbcp_state_t s_state;
+static nv_state_t s_nv_state;
 
 // ---------------------------------------------------------------------------
 // API function pointers (populated at plugin entry)
 // ---------------------------------------------------------------------------
 
+static ora_lookup_fn_t                      s_lookup;
 static ora_log_fn_t                         s_log;
 static ora_demangle_addr_fn_t               s_demangle;
 static ora_reprogram_ram_rom_slot_fn_t      s_reprogram;
@@ -333,6 +384,13 @@ static void zero_bytes(uint8_t *p, uint8_t n) {
     while (n--) *vp++ = 0u;
 }
 
+static void init_nv_state(void) {
+    s_nv_state.active = false;
+    s_nv_state.staging_slot = 0u;
+    s_nv_state.staging_base = 0u;
+    s_nv_state.staging_size = 0u;
+}
+
 static void init_rbcp(bool reset_slot_info) {
     // Initialise device state with protocol defaults
     s_state.active              = false;
@@ -346,6 +404,7 @@ static void init_rbcp(bool reset_slot_info) {
     s_state.token_lsb           = 0u;
     s_state.token_msb           = 0u;
     s_read_idx                  = 0u;
+    init_nv_state();
     if (reset_slot_info) {
         s_state.active_slot         = 0u;
     }
@@ -430,7 +489,7 @@ static bool exec_enter_cmd_resp(void) {
         s_log("ENTER_CMD_RESP failed: could not read existing token");
         return false;
     }
-    s_log("ENTER_CMD_RESP: cp=0x%04X ro=%u rsz=%u cplt=0x%02X stok=0x%02X token=0x%02X%02X",
+    s_log("ECR: cp=0x%04X ro=%u rsz=%u cplt=0x%02X stok=0x%02X token=0x%02X%02X",
           (unsigned)command_page, (unsigned)region_offset, (unsigned)region_size,
           complete, status_ok, s_state.token_msb, s_state.token_lsb);
 
@@ -580,16 +639,13 @@ static bool exec_get_ram_slot_info_all(uint8_t slot) {
     return true;
 }
 
+static const char device_type_str[] = "One ROM";
 static bool exec_get_device_type(void) {
     uint8_t device_type[24];
     zero_bytes((uint8_t *)device_type, sizeof(device_type));
-    device_type[0] = 'O';
-    device_type[1] = 'n';
-    device_type[2] = 'e';
-    device_type[3] = ' ';
-    device_type[4] = 'R';
-    device_type[5] = 'O';
-    device_type[6] = 'M';
+    for (size_t i = 0; i < sizeof(device_type_str) && i < sizeof(device_type); i++) {
+        device_type[i] = device_type_str[i];
+    }
     data_write(s_state.active_slot, 0u, device_type, sizeof(device_type));
     s_log("GET_DEVICE_TYPE: dt=%s", device_type);
     return true;
@@ -614,10 +670,10 @@ static bool exec_get_protocol_version(void) {
 }
 
 static bool exec_slot_peek(void) {
+    uint8_t count  = ring_read_byte();
     uint8_t a0     = ring_read_byte();
     uint8_t a1     = ring_read_byte();
     uint8_t a2     = ring_read_byte();
-    uint8_t count  = ring_read_byte();
     uint8_t target = ring_read_byte();
 
     s_log("SLOT_PEEK: tgt=%u a0=0x%02X a1=0x%02X a2=0x%02X ct=%u",
@@ -651,13 +707,13 @@ static bool exec_slot_peek(void) {
     }
 
     // Write the requested data in chunks, small enough to not blow the stack
-    const uint32_t buf_size = 32u;
-    uint8_t  buf[buf_size];
+#define SLOT_PEEK_BUF_SIZE 32u
+    uint8_t  buf[SLOT_PEEK_BUF_SIZE];
     uint32_t remaining  = byte_count;
     uint32_t data_off   = 0u;
 
     while (remaining > 0u) {
-        uint32_t chunk = (remaining > buf_size) ? buf_size : remaining;
+        uint32_t chunk = (remaining > SLOT_PEEK_BUF_SIZE) ? SLOT_PEEK_BUF_SIZE : remaining;
         for (uint32_t i = 0u; i < chunk; i++) {
             uint32_t phys_offset = s_map_addr_to_phys(addr + data_off + i);
             uint8_t  raw         = ((const uint8_t *)slot_base)[phys_offset];
@@ -682,10 +738,10 @@ static bool exec_slot_peek(void) {
 // ---------------------------------------------------------------------------
 
 static bool exec_slot_poke(void) {
+    uint8_t byte   = ring_read_byte();
     uint8_t a0     = ring_read_byte();
     uint8_t a1     = ring_read_byte();
     uint8_t a2     = ring_read_byte();
-    uint8_t byte   = ring_read_byte();
     uint8_t target = ring_read_byte();
 
     if (target == 0xAAu) {
@@ -762,6 +818,293 @@ static bool exec_slot_poke_all_byte(void) {
         }
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// NV Storage
+// ---------------------------------------------------------------------------
+
+// RP2350 bootrom lookup
+#define NV_ROM_TABLE_LOOKUP_ADDR    0x00000016u
+#define NV_ROM_TABLE_FLAG_ARM_SEC   0x0004u
+
+// RP2350 XIP QMI registers
+#define XIP_QMI_BASE        0x400d0000
+#define XIP_QMI_M0_TIMING   (*((volatile uint32_t *)(XIP_QMI_BASE + 0x0C)))
+#define XIP_QMI_M0_CLKDIV_MASK   0xFF
+#define XIP_QMI_M0_CLKDIV_SHIFT  0
+
+// RP2350 flash
+#define RP2350_FLASH_BASE   0x10000000u
+
+static void *nv_lookup_boot_fn(char a, char b) {
+    typedef void *(*rom_table_lookup_fn)(uint32_t code, uint32_t mask);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+    rom_table_lookup_fn rom_table_lookup =
+        (rom_table_lookup_fn)(uintptr_t)*(uint16_t *)(NV_ROM_TABLE_LOOKUP_ADDR);
+#pragma GCC diagnostic pop
+    uint32_t code = ((uint32_t)(uint8_t)b << 8) | (uint32_t)(uint8_t)a;
+    return rom_table_lookup(code, NV_ROM_TABLE_FLAG_ARM_SEC);
+}
+
+static void nv_discard_impl(void) {
+    init_nv_state();
+}
+
+static bool exec_get_nv_capability(void) {
+    // Writable only if hardware supports it AND >1 RAM slot available
+    // (single-slot devices can never free a slot for staging)
+    bool writable = (s_get_ram_slot_count() > 1u);
+    uint8_t resp[4] = {
+        (uint8_t)(NV_STORAGE_SIZE & 0xFFu),
+        (uint8_t)((NV_STORAGE_SIZE >> 8u) & 0xFFu),
+        writable ? 0x01u : 0x00u,
+        0x00u
+    };
+    data_write(s_state.active_slot, 0u, resp, 4u);
+    return true;
+}
+
+static bool exec_nv_peek(void) {
+    uint8_t count   = ring_read_byte();
+    uint8_t loc_lsb = ring_read_byte();
+    uint8_t loc_msb = ring_read_byte();
+
+    if (loc_msb > 0x7Fu) {
+        s_log("NV_PEEK: loc_msb 0x%02X exceeds 0x7F", (unsigned)loc_msb);
+        return false;
+    }
+    uint32_t location   = (uint32_t)loc_lsb | ((uint32_t)loc_msb << 8u);
+    uint32_t byte_count = (count == 0u) ? 256u : (uint32_t)count;
+    if (location + byte_count > NV_STORAGE_SIZE) {
+        s_log("NV_PEEK: range exceeds NV storage size");
+        return false;
+    }
+    if (byte_count > s_state.cfg.data_size) {
+        s_log("NV_PEEK: count %u exceeds data section", (unsigned)byte_count);
+        return false;
+    }
+    data_write(s_state.active_slot, 0u, &__nv_storage_start[location], byte_count);
+    return true;
+}
+
+static bool nv_poke_begin_impl(uint8_t slot) {
+    if (s_nv_state.active) {
+        s_log("NPB: transaction already in progress");
+        return false;
+    }
+    if (slot == s_state.active_slot) {
+        s_log("NPB: slot %u is the active slot", (unsigned)slot);
+        return false;
+    }
+
+    uint32_t slot_base, slot_size;
+    if (s_get_ram_slot_info(slot, &slot_base, &slot_size, NULL) != ORA_RESULT_OK) {
+        s_log("NPB: invalid slot %u", (unsigned)slot);
+        return false;
+    }
+
+    uint32_t erase_fn_size = (uint32_t)(__flash_erase_fn_end - __flash_erase_fn_start);
+    uint32_t required      = NV_STORAGE_SIZE + erase_fn_size;
+    if (slot_size < required) {
+        s_log("NPB: slot %u too small (%u < %u)",
+              (unsigned)slot, (unsigned)slot_size, (unsigned)required);
+        return false;
+    }
+
+    // Copy NV flash contents into staging (linear SRAM write, no mangling)
+    volatile uint8_t *staging = (volatile uint8_t *)slot_base;
+    for (uint32_t i = 0u; i < NV_STORAGE_SIZE; i++) {
+        staging[i] = __nv_storage_start[i];
+    }
+
+    // Copy erase function binary immediately after staging data.
+    // Set Thumb bit on the function pointer at call time, not here.
+    volatile uint8_t *erase_dest = staging + NV_STORAGE_SIZE;
+    for (uint32_t i = 0u; i < erase_fn_size; i++) {
+        erase_dest[i] = __flash_erase_fn_start[i];
+    }
+
+    s_nv_state.active       = true;
+    s_nv_state.staging_slot = slot;
+    s_nv_state.staging_base = slot_base;
+    s_nv_state.staging_size = slot_size;
+
+    s_log("NPB: slot=%u base=0x%08X fn_size=%u",
+          (unsigned)slot, (unsigned)slot_base, (unsigned)erase_fn_size);
+    return true;
+}
+
+static bool exec_nv_poke_begin(void) {
+    uint8_t slot = ring_read_byte();
+    if (slot == 0xAAu) {
+        s_log("NPB: slot 0xAA invalid");
+        return false;
+    }
+    return nv_poke_begin_impl(slot);
+}
+
+static bool nv_poke_impl(uint8_t byte, uint8_t loc_lsb, uint8_t loc_msb) {
+    if (!s_nv_state.active) {
+        s_log("NV_POKE: no transaction in progress");
+        return false;
+    }
+    if (loc_msb > 0x7Fu) {
+        s_log("NV_POKE: loc_msb 0x%02X exceeds 0x7F", (unsigned)loc_msb);
+        return false;
+    }
+    uint32_t location = (uint32_t)loc_lsb | ((uint32_t)loc_msb << 8u);
+    if (location >= NV_STORAGE_SIZE) {
+        s_log("NV_POKE: location %u out of range", (unsigned)location);
+        return false;
+    }
+    ((volatile uint8_t *)s_nv_state.staging_base)[location] = byte;
+    return true;
+}
+
+static bool exec_nv_poke(void) {
+    uint8_t byte    = ring_read_byte();
+    uint8_t loc_lsb = ring_read_byte();
+    uint8_t loc_msb = ring_read_byte();
+    return nv_poke_impl(byte, loc_lsb, loc_msb);
+}
+
+static bool exec_nv_poke_discard(void) {
+    if (!s_nv_state.active) {
+        s_log("NV_POKE_DISCARD: no transaction in progress");
+        return false;
+    }
+    nv_discard_impl();
+    return true;
+}
+
+// Shared magics that the USB stack watches for to pause and resume the flash
+// operations in the commit sequence below.
+#define FLASH_PAUSE_REQUEST  0x464C5348u    // FLSH
+#define FLASH_PAUSE_ACK      0x464C4F4Bu    // FLOK
+#define FLASH_RESUME         0x464C5245u    // FLRE
+
+static bool exec_nv_poke_commit(void) {
+    if (!s_nv_state.active) {
+        s_log("NPC: no transaction in progress");
+        return false;
+    }
+
+    // Look up all bootrom functions while XIP is still active.
+    // On any lookup failure, leave the transaction active so the host
+    // can retry or discard per the spec.
+    connect_internal_flash_fn_t connect_internal_flash =
+        (connect_internal_flash_fn_t)nv_lookup_boot_fn('I', 'F');
+    if (connect_internal_flash == NULL) {
+        s_log("NPC: connect_internal_flash not found");
+        return false;
+    }
+    flash_exit_xip_fn_t flash_exit_xip =
+        (flash_exit_xip_fn_t)nv_lookup_boot_fn('E', 'X');
+    if (flash_exit_xip == NULL) {
+        s_log("NPC: flash_exit_xip not found");
+        return false;
+    }
+    flash_range_erase_fn_t flash_range_erase =
+        (flash_range_erase_fn_t)nv_lookup_boot_fn('R', 'E');
+    if (flash_range_erase == NULL) {
+        s_log("NPC: flash_range_erase not found");
+        return false;
+    }
+    flash_flush_cache_fn_t flash_flush_cache =
+        (flash_flush_cache_fn_t)nv_lookup_boot_fn('F', 'C');
+    if (flash_flush_cache == NULL) {
+        s_log("NPC: flash_flush_cache not found");
+        return false;
+    }
+    flash_select_xip_read_mode_fn_t flash_select_xip_read_mode =
+        (flash_select_xip_read_mode_fn_t)nv_lookup_boot_fn('X', 'M');
+    if (flash_select_xip_read_mode == NULL) {
+        s_log("NPC: flash_select_xip_read_mode not found");
+        return false;
+    }
+    flash_range_program_fn_t flash_range_program =
+        (flash_range_program_fn_t)nv_lookup_boot_fn('R', 'P');
+    if (flash_range_program == NULL) {
+        s_log("NPC: flash_range_program not found");
+        return false;
+    }
+    
+    // Get the exclusive mode functions, which we'll use to ensure the flash
+    // isn't accessed during the critical section of the commit.
+    ora_enter_exclusive_mode_fn_t enter_exclusive =
+        s_lookup(ORA_ID_ENTER_EXCLUSIVE_MODE);
+    ora_exit_exclusive_mode_fn_t exit_exclusive =
+        s_lookup(ORA_ID_EXIT_EXCLUSIVE_MODE);
+
+    if (enter_exclusive() != ORA_RESULT_OK) {
+        s_log("NPC: enter exclusive mode failed");
+        return false;
+    }
+
+    connect_internal_flash();
+
+    // Read clkdiv and compute flash offset before exiting XIP.
+    uint8_t  clkdiv    = (uint8_t)((XIP_QMI_M0_TIMING >> XIP_QMI_M0_CLKDIV_SHIFT)
+                                    & XIP_QMI_M0_CLKDIV_MASK);
+    uint32_t flash_offs = (uint32_t)__nv_storage_start - RP2350_FLASH_BASE;
+
+    s_log("NPC: offs=0x%08X clkdiv=%u", (unsigned)flash_offs, (unsigned)clkdiv);
+
+    // Erase the NV sector via the function blob copied into the RAM slot.
+    // Thumb bit must be set on the function pointer.
+    nv_flash_erase_critical_fn_t erase_fn =
+        (nv_flash_erase_critical_fn_t)((s_nv_state.staging_base + NV_STORAGE_SIZE) | 1u);
+    erase_fn(
+        flash_exit_xip,
+        flash_range_erase,
+        flash_flush_cache,
+        flash_select_xip_read_mode,
+        flash_offs,
+        NV_STORAGE_SIZE,
+        clkdiv
+    );
+
+    s_log("NPC: flash erase complete, exiting XIP");
+
+    // XIP is restored. Write staging buffer to flash.
+    // flash_range_program is a bootrom function and returns void;
+    // failure is not detectable here.
+    flash_range_program(flash_offs, (const uint8_t *)s_nv_state.staging_base, NV_STORAGE_SIZE);
+
+    exit_exclusive();
+
+    s_log("NPC: complete");
+    nv_discard_impl();
+    return true;
+}
+
+static bool exec_nv_poke_commit_byte(void) {
+    uint8_t byte    = ring_read_byte();
+    uint8_t loc_lsb = ring_read_byte();
+    uint8_t loc_msb = ring_read_byte();
+    uint8_t slot    = ring_read_byte();
+    if (slot == 0xAAu) {
+        s_log("NV_POKE_COMMIT_BYTE: slot 0xAA invalid");
+        return false;
+    }
+
+    // Avoid erasing/writing flash if the byte hasn't changed.
+    uint32_t location = (uint32_t)loc_lsb | ((uint32_t)loc_msb << 8u);
+    if (loc_msb <= 0x7Fu && location < NV_STORAGE_SIZE &&
+        __nv_storage_start[location] == byte) {
+        return true;
+    }
+
+    if (!nv_poke_begin_impl(slot)) {
+        return false;
+    }
+    if (!nv_poke_impl(byte, loc_lsb, loc_msb)) {
+        nv_discard_impl();
+        return false;
+    }
+    return exec_nv_poke_commit();
 }
 
 // ---------------------------------------------------------------------------
@@ -886,6 +1229,36 @@ static bool dispatch(
             }
             break;
 
+        case GRP_NV_STORAGE:
+            if (!s_state.active) { ok = false; break; }
+            switch (cmd) {
+                case CMD_GET_NV_CAPABILITY:
+                    ok = exec_get_nv_capability();
+                    break;
+                case CMD_NV_PEEK:
+                    ok = exec_nv_peek();
+                    break;
+                case CMD_NV_POKE_BEGIN:
+                    ok = exec_nv_poke_begin();
+                    break;
+                case CMD_NV_POKE:
+                    ok = exec_nv_poke();
+                    break;
+                case CMD_NV_POKE_COMMIT:
+                    ok = exec_nv_poke_commit();
+                    break;
+                case CMD_NV_POKE_DISCARD:
+                    ok = exec_nv_poke_discard();
+                    break;
+                case CMD_NV_POKE_COMMIT_BYTE:
+                    ok = exec_nv_poke_commit_byte();
+                    break;
+                default:
+                    ok = false;
+                    break;
+            }
+            break;
+
         case GRP_RESET:
             switch (cmd) {
                 case CMD_RBCP_RESET:
@@ -956,6 +1329,11 @@ static bool run_command(uint8_t group, uint8_t cmd) {
         cmd_begin(s_state.active_slot, group, cmd);
         cmd_end(s_state.active_slot, ok);
     }
+    
+    if (was_active && !now_active) {
+        nv_discard_impl();
+    }
+
     // Command mode (!was_active && !now_active): no back-channel, nothing to write.
     // EXIT_CMD_RESP_SILENT / SWITCH_AND_EXIT (exit_silent=true): no header update.
 
@@ -963,18 +1341,15 @@ static bool run_command(uint8_t group, uint8_t cmd) {
 }
 
 // ---------------------------------------------------------------------------
-// Plugin entry point
+// Plugin setup
 // ---------------------------------------------------------------------------
 
-void rbcp_main(
-    ora_lookup_fn_t         ora_lookup_fn,
-    ora_plugin_type_t       plugin_type,
-    const ora_entry_args_t *entry_args
+__attribute__((noinline)) static void rbcp_setup(
+    ora_lookup_fn_t ora_lookup_fn,
+    ora_knock_t *knock
 ) {
-    (void)plugin_type;
-    (void)entry_args;
-
     // Retrieve API function pointers
+    s_lookup               = ora_lookup_fn;
     s_log                  = ora_lookup_fn(ORA_ID_LOG);
     s_demangle             = ora_lookup_fn(ORA_ID_DEMANGLE_ADDR);
     s_reprogram            = ora_lookup_fn(ORA_ID_REPROGRAM_RAM_ROM_SLOT);
@@ -991,14 +1366,13 @@ void rbcp_main(
     s_map_data_to_phys     = ora_lookup_fn(ORA_ID_MAP_DATA_TO_PHYS);
     s_demangle_data        = ora_lookup_fn(ORA_ID_DEMANGLE_DATA);
 
+    ora_start_address_monitor_fn_t start_address_monitor =
+        ora_lookup_fn(ORA_ID_START_ADDRESS_MONITOR);
+    ora_init_knock_fn_t init_knock = ora_lookup_fn(ORA_ID_INIT_KNOCK);
     ora_setup_address_monitor_fn_t              setup_address_monitor =
         ora_lookup_fn(ORA_ID_SETUP_ADDRESS_MONITOR);
-    ora_start_address_monitor_fn_t              start_address_monitor =
-        ora_lookup_fn(ORA_ID_START_ADDRESS_MONITOR);
     ora_get_address_monitor_ring_write_pos_fn_t get_write_pos =
         ora_lookup_fn(ORA_ID_GET_ADDRESS_MONITOR_RING_WRITE_POS);
-    ora_init_knock_fn_t     init_knock     = ora_lookup_fn(ORA_ID_INIT_KNOCK);
-    ora_wait_for_knock_fn_t wait_for_knock = ora_lookup_fn(ORA_ID_WAIT_FOR_KNOCK);
 
     s_log("RBCP plugin starting");
 
@@ -1026,8 +1400,7 @@ void rbcp_main(
         return;
     }
 
-    // Pre-compute knock sequence match values before starting the monitor.
-    ORA_KNOCK_DECLARE(knock, KNOCK_LEN);
+    // Initialize knock detection with the pre-computed sequence.
     if (init_knock(
             s_knock_seq,
             KNOCK_LEN,
@@ -1041,6 +1414,26 @@ void rbcp_main(
 
     // Begin capturing address bus activity.
     start_address_monitor();
+}
+
+// ---------------------------------------------------------------------------
+// Plugin entry point
+// ---------------------------------------------------------------------------
+
+void rbcp_main(
+    ora_lookup_fn_t         ora_lookup_fn,
+    ora_plugin_type_t       plugin_type,
+    const ora_entry_args_t *entry_args
+) {
+    (void)plugin_type;
+    (void)entry_args;
+
+    // Pre-compute knock sequence match values before starting the monitor.
+    ORA_KNOCK_DECLARE(knock, KNOCK_LEN);
+
+    rbcp_setup(ora_lookup_fn, knock);
+
+    ora_wait_for_knock_fn_t wait_for_knock = ora_lookup_fn(ORA_ID_WAIT_FOR_KNOCK);
 
     s_log("RBCP: ready, awaiting knock");
 
@@ -1099,5 +1492,6 @@ void rbcp_main(
 
         // Command-Response mode exited (or Command-mode session ended).
         // Return to outer loop to await the next knock.
+        s_log("RBCP: session ended");
     }
 }

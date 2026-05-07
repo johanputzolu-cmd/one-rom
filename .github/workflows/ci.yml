@@ -86,6 +86,9 @@ jobs:
         make clean
         HW_REV=fire-24-e MCU=rp2350 ROM_CONFIGS= EXCLUDE_METADATA=1 make
         make -C plugins/system/usb
+        make -C plugins/user/activity
+        make -C plugins/user/blink
+        make -C plugins/user/host-control
         make -C sdrr/ora/examples
 
     - name: Build tools

@@ -32,10 +32,10 @@ const ora_plugin_header_t ora_plugin_header = {
     .plugin_type = ORA_PLUGIN_TYPE_SYSTEM,
     .sam_usage = 255,
     .overrides1 = ORA_OVERRIDE1_DISABLE_VBUS_DETECT,
-    .properties1 = ORA_PROPERTY1_SUPPORTS_USB_RUNNING,
+    .properties1 = ORA_PROPERTY1_SUPPORTS_USB_RUNNING | ORA_PROPERTY1_SUPPORTS_YIELD,
     .min_fw_major_version = 0,
     .min_fw_minor_version = 6,
-    .min_fw_patch_version = 7,
+    .min_fw_patch_version = 9,
     .reserved = {0},
 };
 
@@ -198,11 +198,13 @@ void usb_main(
 
     // Initialize USB and related functionality
     usb_init(ora_lookup_fn);
+    ora_yield_fn_t yield = ora_lookup_fn(ORA_ID_YIELD);
 
     while (1) {
         tud_task();
         usb_picoboot_task();
         usb_plugin_task();
+        yield(NULL);
     }
 
     ERR("USB plugin exiting");

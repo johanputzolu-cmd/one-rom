@@ -127,7 +127,7 @@ void Reset_Handler(void) {
     // Enable hard floating point support:
     // - Same on STM32F4 M4 and RP235X Cortex-M33
     // - Enable CP10 and CP11 (FP extension) in the Cortex-M33
-    SCB_CPACR |= (0xF << 20); // Enable CP10 and CP11 full access
+    SCB_CPACR |= SCB_CPACR_ENABLE_FP; // Enable CP10 and CP11 full access
     __asm volatile ("dsb");
     __asm volatile ("isb");
 
@@ -178,7 +178,7 @@ void Reset_Handler(void) {
     // We can now launch plugins.
     ora_launch_plugins(&sdrr_info);
 
-    // In case there's no user plugin (i.e. on this core)
+    // Belt and braces - ora_launch_plugins never returns.
     while(1) {
         __asm volatile("wfi");
     }
@@ -212,13 +212,32 @@ void NMI_Handler(void) {
     }
 }
 
+typedef struct {
+    uint32_t r0, r1, r2, r3;
+    uint32_t r12;
+    uint32_t lr;
+    uint32_t pc;
+    uint32_t xpsr;
+} stacked_frame_t;
+
 // HardFault_Handler - double blink pattern
-void HardFault_C(void) {
+void HardFault_C(stacked_frame_t *frame) {
+    (void)frame;
+
+    // Fault status registers
+    volatile uint32_t cfsr  = *(volatile uint32_t *)0xE000ED28; // MMFSR+BFSR+UFSR
+    volatile uint32_t hfsr  = *(volatile uint32_t *)0xE000ED2C;
+    volatile uint32_t mmfar = *(volatile uint32_t *)0xE000ED34; // Valid if CFSR.MMARVALID
+    volatile uint32_t bfar  = *(volatile uint32_t *)0xE000ED38; // Valid if CFSR.BFARVALID
+    (void)cfsr;
+    (void)hfsr;
+    (void)mmfar;
+    (void)bfar;
+
     setup_status_led();
-    
     while(1) {
-        blink_pattern(100000, 200000, 2); // Double blink
-        delay(1000000); // Long pause
+        blink_pattern(100000, 200000, 2);
+        delay(1000000);
     }
 }
 

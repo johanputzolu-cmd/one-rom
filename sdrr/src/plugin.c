@@ -481,6 +481,176 @@ ora_result_t ora_demangle_data(uint8_t physical_data, uint8_t *logical_data_out)
     return ORA_RESULT_OK;
 }
 
+// Private to the framework — not exposed to plugins
+#define EXCLUSIVE_MODE_REQUEST  0x584D5251u  // XMRQ
+#define EXCLUSIVE_MODE_ACK      0x584D414Bu  // XMAK
+#define EXCLUSIVE_MODE_RESUME   0x584D5245u  // XMRE
+
+#define YIELD_BUF_SIZE 64u
+
+// Runs from a stack copy while XIP may be disabled — must be PIC.
+// SIO register accesses compile to MOVW/MOVT+LDR/STR, so no PC-relative
+// data loads are generated.
+extern const uint8_t __yield_wait_for_resume_start[];
+extern const uint8_t __yield_wait_for_resume_end[];
+__attribute__((section(".yield_wait_for_resume"), noinline, used, naked))
+static void yield_wait_for_resume(void) {
+    __asm volatile (
+        "cpsid i                    \n"
+        "movw r1, #0x0000           \n"
+        "movt r1, #0xD000           \n"   // r1 = SIO_BASE (0xD0000000)
+
+        // Wait for TX FIFO ready (bit 1 of FIFO_ST)
+        "1:                         \n"
+        "ldr  r2, [r1, #0x50]       \n"   // SIO_FIFO_ST
+        "tst  r2, #2                \n"
+        "beq  1b                    \n"
+
+        // Send ACK
+        "movw r2, #0x414B           \n"
+        "movt r2, #0x584D           \n"   // EXCLUSIVE_MODE_ACK
+        "str  r2, [r1, #0x54]       \n"   // SIO_FIFO_WR
+
+        // Pre-load RESUME value
+        "movw r0, #0x5245           \n"
+        "movt r0, #0x584D           \n"   // EXCLUSIVE_MODE_RESUME
+
+        // Wait for RESUME
+        "2:                         \n"
+        "ldr  r2, [r1, #0x50]       \n"   // SIO_FIFO_ST
+        "tst  r2, #1                \n"
+        "beq  2b                    \n"
+        "ldr  r2, [r1, #0x58]       \n"   // SIO_FIFO_RD
+        "cmp  r2, r0                \n"
+        "bne  2b                    \n"
+
+        "cpsie i                    \n"
+        "bx   lr                    \n"
+    );
+}
+
+ora_result_t ora_yield(uint8_t *was_paused_out) {
+    if (was_paused_out != NULL) {
+        *was_paused_out = 0;
+    }
+
+    if (!(SIO_FIFO_ST & 1u)) {
+        return ORA_RESULT_OK;
+    }
+
+    uint32_t val = SIO_FIFO_RD;
+    if (val != EXCLUSIVE_MODE_REQUEST) {
+        ERR("ora_yield: unexpected FIFO value 0x%08X", (unsigned)val);
+        return ORA_RESULT_OK;
+    }
+
+    // The other core has requested to enter exclusive mode, so we need to
+    // wait for it to finish before processing.  We do this by copying
+    // yield_wait_for_resume onto the stack then executing it.
+    LOG("Core pausing...");
+
+    uintptr_t fn_start = (uintptr_t)__yield_wait_for_resume_start & ~1u;
+    // fn_size fitting in YIELD_BUF_SIZE is asserted by the linker in
+    // flash_rodata.ld
+    size_t fn_size = __yield_wait_for_resume_end - __yield_wait_for_resume_start;
+
+    uint8_t buf[YIELD_BUF_SIZE] __attribute__((aligned(4)));
+    for (size_t i = 0; i < fn_size; i++) {
+        buf[i] = ((const uint8_t *)fn_start)[i];
+    }
+
+    ((void (*)(void))((uintptr_t)buf | 1u))();
+
+    LOG("Core resumed");
+
+    if (was_paused_out != NULL) {
+        *was_paused_out = 1;
+    }
+
+    return ORA_RESULT_OK;
+}
+
+// Returns  0: no plugin on other core, safe to proceed without FIFO
+//          1: plugin present and supports yield
+//         -1: plugin present but does not support yield
+static int other_core_yield_capability(void) {
+    uint32_t this_core = SIO_CPUID;
+
+    const sdrr_rom_set_t *set;
+    sdrr_rom_type_t expected_type;
+
+    if (this_core == 0) {
+        if (sdrr_info.metadata_header->rom_set_count < 1) {
+            return 0;
+        }
+        set = &sdrr_info.metadata_header->rom_sets[0];
+        expected_type = CHIP_TYPE_SYSTEM_PLUGIN;
+    } else {
+        if (sdrr_info.metadata_header->rom_set_count < 2) {
+            // Return 1 even though there's no plugin - as the firmware _is_
+            // calling yield
+            return 1;
+        }
+        set = &sdrr_info.metadata_header->rom_sets[1];
+        expected_type = CHIP_TYPE_USER_PLUGIN;
+    }
+
+    if (set->roms[0]->rom_type != expected_type) {
+        return 0;
+    }
+
+    const ora_plugin_header_t *header = (const ora_plugin_header_t *)set->data;
+    return (header->properties1 & ORA_PROPERTY1_SUPPORTS_YIELD) ? 1 : -1;
+}
+
+ora_result_t ora_enter_exclusive_mode(void) {
+    int cap = other_core_yield_capability();
+    if (cap < 0) return ORA_RESULT_NOT_SUPPORTED;
+    if (cap == 0) return ORA_RESULT_OK;
+
+    LOG("Requesting exclusive mode");
+
+    while (!(SIO_FIFO_ST & 2u)) {
+        ;
+    }
+    SIO_FIFO_WR = EXCLUSIVE_MODE_REQUEST;
+
+    uint32_t ack;
+    do {
+        while (!(SIO_FIFO_ST & 1u)) {
+            ;
+        }
+        ack = SIO_FIFO_RD;
+    } while (ack != EXCLUSIVE_MODE_ACK);
+
+    LOG("Exclusive mode granted");
+
+    for (volatile int i = 0; i < 100000; i++) {}
+
+    return ORA_RESULT_OK;
+}
+
+ora_result_t ora_exit_exclusive_mode(void) {
+    //int cap = other_core_yield_capability();
+    //if (cap < 0) return ORA_RESULT_NOT_SUPPORTED;
+    //if (cap == 0) return ORA_RESULT_OK;
+
+    LOG("Exiting exclusive mode");
+
+    for (volatile int i = 0; i < 100000; i++) {}
+
+    while (!(SIO_FIFO_ST & 2u)) {
+        ;
+    }
+    SIO_FIFO_WR = EXCLUSIVE_MODE_RESUME;
+
+    LOG("Exclusive mode exit signaled");
+
+    for (volatile int i = 0; i < 1000000; i++) {}
+
+    return ORA_RESULT_OK;
+}
+
 void *ora_fn_lookup(api_id_t id) {
     switch (id) {
         case ORA_ID_REBOOT_BOOTSEL:
@@ -561,6 +731,12 @@ void *ora_fn_lookup(api_id_t id) {
             return ora_get_device_version;
         case ORA_ID_DEMANGLE_DATA:
             return ora_demangle_data;
+        case ORA_ID_YIELD:
+            return ora_yield;
+        case ORA_ID_ENTER_EXCLUSIVE_MODE:
+            return ora_enter_exclusive_mode;
+        case ORA_ID_EXIT_EXCLUSIVE_MODE:
+            return ora_exit_exclusive_mode;
         default:
             return NULL;
     }
@@ -607,7 +783,7 @@ static void reset_core1(void) {
 // MUST be kept in sync with the values in plugin.ld and changing them forces
 // a change to the plugin version.
 static const ora_entry_args_t system_plugin_args = {
-    .core = ORA_CORE_0,
+    .core = ORA_CORE_1,
     .static_ram_base = 0x20081000,
     .static_ram_size = 0x800,
     .stack_top = 0x20081C00,
@@ -624,7 +800,14 @@ static const ora_entry_args_t user_plugin_args = {
     // plugin to manage.
 };
 
+ora_result_t ora_yield(uint8_t *was_paused_out);
+
 static void core1_main(void) {
+    // Enable hard FP support
+    SCB_CPACR |= SCB_CPACR_ENABLE_FP;
+    __asm volatile ("dsb");
+    __asm volatile ("isb");
+
     // Read a single uint32_t from the FIFO
     DEBUG("Core 1 started");
     uint32_t core1_plugin_entry = fifo_pop_blocking();
@@ -632,6 +815,11 @@ static void core1_main(void) {
     ora_plugin_entry_t entry = (ora_plugin_entry_t)(uintptr_t)core1_plugin_entry;
     DEBUG("Core 1 launching plugin at 0x%08x", core1_plugin_entry);
     entry(ora_fn_lookup, ORA_PLUGIN_TYPE_SYSTEM, &system_plugin_args);
+
+    ERR("System plugin returned unexpectedly");
+    while (1) {
+        ora_yield(NULL);
+    }
 }
 
 extern uint32_t _Min_Stack_Size;
@@ -709,7 +897,7 @@ void launch_core1(ora_plugin_entry_t plugin_entry) {
     fifo_push_blocking(entry);
 }
 
-void ora_launch_plugins(const sdrr_info_t *info) {
+__attribute__((noinline)) ora_plugin_entry_t launch_plugins_inner(const sdrr_info_t *info) {
     // Launch any available system plugin on core 1
     uint8_t system_plugin = 0;
     if (info->metadata_header->rom_set_count >= 1) {
@@ -743,9 +931,9 @@ void ora_launch_plugins(const sdrr_info_t *info) {
             } else {
                 const char *filename = set1->roms[0]->filename;
                 if (filename != NULL) {
-                    LOG("Lauching user plugin: %s", filename);
+                    LOG("Launching user plugin: %s", filename);
                 } else {
-                    LOG("Lauching user plugin");
+                    LOG("Launching user plugin");
                 }
 
                 paint_stack_core0();
@@ -753,9 +941,26 @@ void ora_launch_plugins(const sdrr_info_t *info) {
                 // Set thumb bit
                 uint32_t entry_addr = (uint32_t)(uintptr_t)header->entry | 1;
                 ora_plugin_entry_t entry = (ora_plugin_entry_t)(uintptr_t)entry_addr;
-                entry(ora_fn_lookup, ORA_PLUGIN_TYPE_USER, &user_plugin_args);
+                return entry;
             }
         }
+    }
+
+    return NULL; // No user plugin to launch
+}
+
+void ora_launch_plugins(const sdrr_info_t *info) {
+    ora_plugin_entry_t core0_entry = launch_plugins_inner(info);
+
+    // We launch the user plugin from this outer function in order to save as
+    // much stack space as possible.
+    if (core0_entry != NULL) {
+        core0_entry(ora_fn_lookup, ORA_PLUGIN_TYPE_USER, &user_plugin_args);
+        ERR("User plugin returned unexpectedly");
+    }
+
+    while (1) {
+        ora_yield(NULL);
     }
 }
 

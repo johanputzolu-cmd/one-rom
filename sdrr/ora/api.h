@@ -271,6 +271,24 @@ typedef enum {
      */
     ORA_ID_DEMANGLE_DATA = 0x00000026,
 
+    /**
+     * @brief Enter exclusive mode
+     * @sa ora_enter_exclusive_mode_fn_t
+     */
+    ORA_ID_ENTER_EXCLUSIVE_MODE = 0x00000027,
+
+    /**
+     * @brief Exit exclusive mode
+     * @sa ora_exit_exclusive_mode_fn_t
+     */
+    ORA_ID_EXIT_EXCLUSIVE_MODE  = 0x00000028,
+
+    /**
+     * @brief Yield to allow another core to enter exclusive mode
+     * @sa ora_yield_fn_t
+     */
+    ORA_ID_YIELD                = 0x00000029,
+
     /** Invalid API identifier */
     ORA_ID_INVALID = 0xFFFFFFFF,
 } api_id_t;
@@ -603,6 +621,7 @@ typedef enum {
     ORA_RESULT_SLOT_ACTIVE = 7,
     ORA_RESULT_INVALID_SLOT = 8,
     ORA_RESULT_NO_SLOT_ACTIVE = 9,
+    ORA_RESULT_NOT_SUPPORTED = 10,
 } ora_result_t;
 
 /**
@@ -1445,6 +1464,61 @@ typedef ora_result_t (*ora_demangle_data_fn_t)(
     uint8_t *logical_data_out
 );
 
+/**
+ * @brief Enter exclusive mode
+ * @sa ORA_ID_ENTER_EXCLUSIVE_MODE
+ *
+ * Requests exclusive use of the MCU by pausing the other core. Sends a pause
+ * request via the inter-core FIFO and blocks until the other core acknowledges.
+ * The other core must be calling @ref ora_yield_fn_t in its main loop for this
+ * to complete.
+ *
+ * Once this function returns, the other core is suspended with interrupts
+ * disabled and it is safe to perform operations that require exclusive MCU
+ * access, such as erasing or programming flash.
+ *
+ * The caller must call @ref ora_exit_exclusive_mode_fn_t when the exclusive
+ * operation is complete.
+ *
+ * @return ORA_RESULT_OK once the other core is suspended and exclusive mode
+ *         is active.  May fail if the other core does not support yielding.
+ */
+typedef ora_result_t (*ora_enter_exclusive_mode_fn_t)(void);
+
+/**
+ * @brief Exit exclusive mode
+ * @sa ORA_ID_EXIT_EXCLUSIVE_MODE
+ *
+ * Releases exclusive mode by signalling the other core to resume. Must be
+ * called after @ref ora_enter_exclusive_mode_fn_t, and only after all
+ * operations requiring exclusive MCU access have completed.
+ *
+ * @return ORA_RESULT_OK on success.  May fail if the other core does not 
+ *         support yielding, or if another error condition occurs.
+ */
+typedef ora_result_t (*ora_exit_exclusive_mode_fn_t)(void);
+
+/**
+ * @brief Yield to allow another core to enter exclusive mode
+ * @sa ORA_ID_YIELD
+ *
+ * Checks whether another core has requested exclusive mode via
+ * @ref ora_enter_exclusive_mode_fn_t or the core firmware has work to do.
+ * If so, acknowledges the request and suspends the calling core with
+ * interrupts disabled until exclusive mode is released by the other core
+ * calling @ref ora_exit_exclusive_mode_fn_t, or the firmware completes its
+ * work.
+ *
+ * This function must be called regularly from the plugin's main loop. If no
+ * exclusive mode request is pending it returns immediately.
+ *
+ * @param was_paused_out  Optional output pointer set to 1 if the calling
+ *                        core was paused during this call, or 0 if not.
+ *                        May be NULL if not required.
+ * @return ORA_RESULT_OK on success, whether or not a pause occurred
+ */
+typedef ora_result_t (*ora_yield_fn_t)(uint8_t *was_paused_out);
+
 /** @} */ // plugin_api_functions
 
 /**
@@ -1586,6 +1660,7 @@ typedef struct {
      * This is a bit field, with 1 indicating the presence of the property.
      * Bit 0 = LSB
      * Bit 0 = supports running while USB is connected @sa ORA_PROPERTY1_SUPPORTS_USB_RUNNING
+     * Bit 1 = supports yielding to allow exclusive mode @sa ORA_PROPERTY1_SUPPORTS_YIELD
      */
     // offset 23
     uint8_t properties1;
@@ -1633,6 +1708,11 @@ _Static_assert(sizeof(ora_plugin_header_t) == ORA_PLUGIN_HEADER_SIZE, "ora_plugi
  * @brief Plugin property flag for USB support
  */
 #define ORA_PROPERTY1_SUPPORTS_USB_RUNNING (1 << 0)
+
+/** 
+ * @brief Plugin property flag for yield support
+ */
+#define ORA_PROPERTY1_SUPPORTS_YIELD (1 << 1)
 
 /** @} */
 

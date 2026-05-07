@@ -1,48 +1,88 @@
 # Copyright (C) 2026 Piers Finlayson <piers@piers.rocks>
 #
 # MIT License
-#
-# Examples Makefile
-#
-# Builds all One ROM plugin examples.  Each example lives in its own
-# subdirectory containing a plugin_main.c source file.
-#
-# Usage:
-#   make
 
-PLUGIN_NAME := user/host-control
-PLUGIN_SRC := src/host_control_main.c
-PLUGIN_TYPE := USER
-PLUGIN_SRC_DIR := src
+TOOLCHAIN ?=
+CC      := $(if $(TOOLCHAIN),$(TOOLCHAIN)/arm-none-eabi-gcc,arm-none-eabi-gcc)
+OBJCOPY := $(if $(TOOLCHAIN),$(TOOLCHAIN)/arm-none-eabi-objcopy,arm-none-eabi-objcopy)
+OBJDUMP := $(if $(TOOLCHAIN),$(TOOLCHAIN)/arm-none-eabi-objdump,arm-none-eabi-objdump)
+
+MAJOR_VERSION := 0
+MINOR_VERSION := 1
+PATCH_VERSION := 0
+BUILD_VERSION := 0
+
+ORA_DIR := ../../../sdrr/ora
+ORA_INCLUDE := -I$(ORA_DIR)
+SDRR_INCLUDE := -I../../../sdrr/include -I../../../output
+PLUGIN_INCLUDE := -I.
 
 BUILD_DIR := build
-ORA_DIR := ../../../sdrr/ora
 
-PLUGIN_MK := $(ORA_DIR)/plugin.mk
+PLUGIN_BASE   := 0x10020000
+PLUGIN_PREFIX := host_control_plugin
 
-.PHONY: help all clean distclean build_dir $(EXAMPLES)
+ELF := $(BUILD_DIR)/$(PLUGIN_PREFIX).elf
+BIN := $(BUILD_DIR)/$(PLUGIN_PREFIX).bin
 
-all: plugin
+SRC := src/host_control_main.c
 
-plugin: build_dir
-	@echo "Building $(PLUGIN_NAME) plugin in $@..."
-	@$(MAKE) -f $(PLUGIN_MK) \
-		SRC=$(CURDIR)/$(PLUGIN_SRC) \
-		BUILD_DIR=$(CURDIR)/$(BUILD_DIR) \
-		ORA_INCLUDE=$(CURDIR)/$(ORA_DIR) \
-		PLUGIN_TYPE=$(PLUGIN_TYPE)
+FLASH_ERASE_SRC := src/flash_erase.c
+FLASH_ERASE_OBJ := $(BUILD_DIR)/src/flash_erase.o
+FLASH_ERASE_EXTRA_CFLAGS := -fPIC -fno-plt
 
-build_dir: 
-	@echo "Creating build directory $(BUILD_DIR) for $(PLUGIN_NAME) plugin..."
-	@mkdir -p $(BUILD_DIR)
+CFLAGS := -mcpu=cortex-m33 -mthumb -mfloat-abi=hard -mfpu=fpv5-sp-d16 \
+          -fstack-usage -fconserve-stack \
+          -O3 -Wall -Wextra -Werror \
+          -ffunction-sections -fdata-sections \
+          -MMD -MP \
+		  -DMAJOR_VERSION=$(MAJOR_VERSION) -DMINOR_VERSION=$(MINOR_VERSION) \
+		  -DPATCH_VERSION=$(PATCH_VERSION) -DBUILD_VERSION=$(BUILD_VERSION) \
+          $(SDRR_INCLUDE) $(ORA_INCLUDE) $(PLUGIN_INCLUDE) \
+		  -Iinclude
+
+LDFLAGS := -nostdlib \
+           -T host_control_plugin.ld \
+           -Wl,--defsym,PLUGIN_TYPE=0 \
+           -Wl,--fatal-warnings \
+		   -Wl,--no-warn-rwx-segments \
+           -Wl,-Map=$(BUILD_DIR)/$(PLUGIN_PREFIX).map
+
+PLUGIN_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC))
+ALL_OBJ    := $(PLUGIN_OBJ) $(FLASH_ERASE_OBJ)
+
+.PHONY: all clean distclean
+
+all: $(BIN)
+
+$(FLASH_ERASE_OBJ): $(FLASH_ERASE_SRC) | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	@echo "Compiling $< (PIC)..."
+	@$(CC) $(CFLAGS) $(FLASH_ERASE_EXTRA_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(ELF): $(ALL_OBJ) $(ORA_DIR)/plugin.h $(ORA_DIR)/api.h $(ORA_DIR)/system.h host_control_plugin.ld
+	@echo "Linking..."
+	@$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_OBJ) -lc -lgcc -o $@
+
+$(BIN): $(ELF)
+	@echo "Converting ELF to binary..."
+	@$(OBJCOPY) -O binary $< $@
+	@$(OBJCOPY) --pad-to $$(($(PLUGIN_BASE) + 0x10000)) --gap-fill 0xFF -O binary $< $@
+	@$(OBJDUMP) -s -j .plugin_header $(ELF) > $(BUILD_DIR)/$(PLUGIN_PREFIX).dis
+	@$(OBJDUMP) -d -S $(ELF) >> $(BUILD_DIR)/$(PLUGIN_PREFIX).dis
+
+$(BUILD_DIR):
+	@mkdir -p $@
 
 clean:
-	@echo "Cleaning all build artifacts..."
-	@rm -fr $(BUILD_DIR)
+	@echo "Cleaning build artifacts..."
+	@rm -rf $(BUILD_DIR)
 
 distclean: clean
 
-help:
-	@echo "Usage:"
-	@echo "  make            - build plugin"
-	@echo "  make distclean  - remove all build artifacts"
+-include $(ALL_OBJ:.o=.d)

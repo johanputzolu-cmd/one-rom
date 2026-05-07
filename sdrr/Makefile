@@ -86,7 +86,7 @@ CFLAGS := $(EXTRA_C_FLAGS) $(COMMON_FLAGS) $(SEGGER_RTT_FLAGS) -Werror \
           -I include -I $(OUTPUT_DIR) -I segger-rtt/RTT -I segger-rtt/Config \
 		  -I apio/include -I epio/include -I ora \
 		  -g -nostdlib -O3 -ffunction-sections -fomit-frame-pointer -fdata-sections \
-		  -Wall -Wextra -MMD -MP \
+		  -Wall -Wextra -MMD -MP -fstack-usage \
 		  -DSDRR_VERSION_MAJOR=$(VERSION_MAJOR) -DSDRR_VERSION_MINOR=$(VERSION_MINOR) \
 		  -DSDRR_VERSION_PATCH=$(VERSION_PATCH) -DSDRR_BUILD_NUMBER=$(BUILD_NUMBER) \
 		  -DSDRR_GIT_COMMIT=\"$(GIT_COMMIT)\" 

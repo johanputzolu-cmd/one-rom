@@ -369,6 +369,8 @@
 #define SCB_VTOR            (*((volatile uint32_t *)(SCB_BASE + 0x08)))
 #define SCB_CPACR           (*((volatile uint32_t *)(SCB_BASE + 0x88)))
 #define SCB_CPACR_CP0_FULL  (0b11 << 0)
+#define SCB_CPACR_ENABLE_FP (0xF << 20)
+#define SAU_CTRL            (*((volatile uint32_t *)(SCB_BASE + 0xD0)))
 
 // Used by assembly
 #define VAL_SIO_GPIO_IN         (SIO_BASE + 0x04)
