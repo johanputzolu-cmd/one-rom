@@ -71,4 +71,33 @@ void usb_picoboot_task(void);
     } \
 } while (0)
 
+//--------------------------------------------------------------------+
+// TIMER0 peripheral
+//--------------------------------------------------------------------+
+#define TIMER0_BASE         0x400b0000
+
+// TIMER0 Registers
+#define TIMER0_TIMELR       (*((volatile uint32_t *)(TIMER0_BASE + 0x0C)))
+#define TIMER0_ALARM0       (*((volatile uint32_t *)(TIMER0_BASE + 0x10)))
+#define TIMER0_INTE         (*((volatile uint32_t *)(TIMER0_BASE + 0x40)))
+#define TIMER0_INTR         (*((volatile uint32_t *)(TIMER0_BASE + 0x3C)))
+
+//--------------------------------------------------------------------+
+// TICKS peripheral
+//--------------------------------------------------------------------+
+#define TICKS_BASE          0x40108000
+
+// TICKS Registers
+#define TICKS_TIMER0_CTRL   (*((volatile uint32_t *)(TICKS_BASE + 0x18)))
+#define TICKS_TIMER0_CYCLES (*((volatile uint32_t *)(TICKS_BASE + 0x1C)))
+
+//--------------------------------------------------------------------+
+// RESET peripheral
+//--------------------------------------------------------------------+
+#define RESETS_BASE         0x40020000
+
+#define RESET_RESET     (*((volatile uint32_t *)(RESETS_BASE + 0x00)))
+#define RESET_DONE      (*((volatile uint32_t *)(RESETS_BASE + 0x08)))
+#define RESET_TIMER0        (1 << 23)
+
 #endif // USB_PLUGIN_H
