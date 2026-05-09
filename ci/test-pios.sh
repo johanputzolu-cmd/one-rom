@@ -92,6 +92,9 @@ test_28_all_rom_types() {
 
     # Supported as of 0.6.11
     run_test   $hw_rev images/test/rand_65536.rom type=23QL512 1 "$extra_flags"
+
+    # Supported as of 0.6.12
+    run_test   $hw_rev images/test/rand_65536.rom trunc,type=23QL384 1 "$extra_flags"
 }
 
 test_32pin() {

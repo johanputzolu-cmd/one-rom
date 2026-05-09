@@ -191,6 +191,7 @@ static void init_address_mangler(
             break;
 
         case CHIP_TYPE_23QL512:
+        case CHIP_TYPE_23QL384:
             mangler->cs1_pin = config->mcu.pins.oe.pin_27512;
             break;
 
@@ -237,8 +238,9 @@ static void init_address_mangler(
         uint8_t pin_a11 = address_mangler.addr_pins[11];
         address_mangler.addr_pins[11] = config->mcu.pins.cs1.pin_231024;
         address_mangler.addr_pins[12] = pin_a11;
-    } else if (rom_type == CHIP_TYPE_23QL512) {
+    } else if (rom_type == CHIP_TYPE_23QL512 || rom_type == CHIP_TYPE_23QL384) {
         address_mangler.addr_pins[15] = config->mcu.pins.ce.pin_27512;
+        address_mangler.addr_pins[16] = 255;
     }
 
     address_mangler.x1_pin = config->mcu.pins.x1;
@@ -286,9 +288,12 @@ void create_address_mangler(const json_config_t* config, const sdrr_rom_type_t r
         uint8_t min_pin = 255;
         uint8_t max_pins;
 
-        // <231024 have 16 pins, 231024/2364 have 18 pins, 23QL512 has 17 pins
+        // <231024 have 16 pins, 231024/2364 have 18 pins
+        // 23QL384 and 23QL512 have 17 pins.
         if (rom_type == CHIP_TYPE_231024 || rom_type == CHIP_TYPE_2364) {
             max_pins = 18;
+        } else if (rom_type == CHIP_TYPE_23QL512 || rom_type == CHIP_TYPE_23QL384) {
+            max_pins = 17;
         } else {
             max_pins = 16;
         }
@@ -553,6 +558,7 @@ const char* rom_type_to_string(sdrr_rom_type_t rom_type) {
         case CHIP_TYPE_28C256: return "28C256";
         case CHIP_TYPE_28C512: return "28C512";
         case CHIP_TYPE_23QL512: return "23QL512";
+        case CHIP_TYPE_23QL384: return "23QL384";
         default: return "unknown";
     }
 }
@@ -583,6 +589,7 @@ uint8_t get_num_cs(sdrr_rom_type_t rom_type) {
         case CHIP_TYPE_2364:
         case CHIP_TYPE_231024:
         case CHIP_TYPE_23QL512:
+        case CHIP_TYPE_23QL384:
             return 1;
         case CHIP_TYPE_28C16:
         case CHIP_TYPE_28C64:
@@ -658,6 +665,7 @@ size_t get_expected_rom_size(sdrr_rom_type_t rom_type) {
         case CHIP_TYPE_28C256: return 32768;
         case CHIP_TYPE_28C512: return 65536;
         case CHIP_TYPE_23QL512: return 65536;
+        case CHIP_TYPE_23QL384: return 49152;
         default: return 0;
     }
 }
@@ -689,6 +697,7 @@ sdrr_rom_type_t rom_type_from_string(const char* type_str) {
     else if (strcmp(type_str, "28C256") == 0) return CHIP_TYPE_28C256;
     else if (strcmp(type_str, "28C512") == 0) return CHIP_TYPE_28C512;
     else if (strcmp(type_str, "23QL512") == 0) return CHIP_TYPE_23QL512;
+    else if (strcmp(type_str, "23QL384") == 0) return CHIP_TYPE_23QL384;
     else return -1; // Unknown type
 }
 
