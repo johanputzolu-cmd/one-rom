@@ -2,7 +2,7 @@
 
 All notables changes between versions are documented in this file.
 
-## v0.6.9 - 2026-??-??
+## v0.6.9 - 2026-05-08
 
 This release introduces support for the [ROM Bus Control Protocol](https://github.com/piersfinlayson/rom-bus-control-protocol) (RBCP), which allows retro systems to interact with and control One ROM directly.  This allows advanced functionality driven by the retro system, such as
 
