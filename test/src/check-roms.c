@@ -22,7 +22,7 @@ int validate_all_rom_sets(json_config_t *json_config, loaded_rom_t *loaded_roms,
     
     // Validate each ROM set
     for (int set_idx = 0; set_idx < sdrr_rom_set_count; set_idx++) {
-        printf("\nValidating ROM set %d (%d ROMs)...\n", set_idx, rom_set[set_idx].roms[0]->rom_type);
+        printf("\nValidating ROM set %d (ROM type %d)...\n", set_idx, rom_set[set_idx].roms[0]->rom_type);
 
         int errors = 0;
         int checked = 0;

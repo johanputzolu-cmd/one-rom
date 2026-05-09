@@ -339,6 +339,7 @@ impl SdrrInfo {
             | SdrrRomType::UserPlugin
             | SdrrRomType::PioPlugin
             | SdrrRomType::Rom28C512
+            | SdrrRomType::Rom23QL384
             | SdrrRomType::Rom27C010
             | SdrrRomType::Rom27C020
             | SdrrRomType::Rom27C040

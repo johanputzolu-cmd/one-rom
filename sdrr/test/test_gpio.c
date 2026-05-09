@@ -104,6 +104,9 @@ static void get_gpio_drive_from_addr_cs(
         } else if (rom_type == CHIP_TYPE_2364 && sdrr_info.pins->chip_pins == 28) {
             local_addr_pins[11] = sdrr_info.pins->cs1;    // 231024 CS1 -> 2364 A11
             local_addr_pins[12] = addr_pins[11];           // 231024 A11 -> 2364 A12
+        } else if (rom_type == CHIP_TYPE_23QL384) {
+            // A15 is CE
+            local_addr_pins[15] = sdrr_info.pins->ce;
         }
 
         for (int ii = 0; ii < num_addr_bits; ii++) {
@@ -156,6 +159,10 @@ static void get_gpio_drive_from_addr_cs(
         case CHIP_TYPE_27C301:
             // /OE should be cs2
             cs1_pin = ce_pin;
+            break;
+
+        case CHIP_TYPE_23QL384:
+            cs1_pin = oe_pin;
             break;
 
         case CHIP_TYPE_27C010:
@@ -385,6 +392,13 @@ void get_gpio_drive(
 
     // Get the number of address bits for this ROM type
     uint32_t chip_size = get_rom_image_size(set_index, rom_index);
+    // Round up to next power of 2 — image may be non-power-of-2 (e.g. 23QL384)
+    // but the PIO address space always is.
+    if (chip_size & (chip_size - 1)) {
+        uint32_t pow2 = 1;
+        while (pow2 < chip_size) pow2 <<= 1;
+        chip_size = pow2;
+    }
     uint8_t num_addr_bits = 0;
     while (chip_size > 1) {
         chip_size >>= 1;

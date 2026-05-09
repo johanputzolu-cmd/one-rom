@@ -533,7 +533,7 @@ typedef struct piorom_config {
     // Ignore /BYTE in 16 bit mode
     uint8_t force_16_bit;
 
-    uint8_t pad7;
+    sdrr_rom_type_t rom_type;
 
     // 20 bytes to here
 

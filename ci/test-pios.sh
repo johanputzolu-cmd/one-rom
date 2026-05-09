@@ -89,6 +89,9 @@ test_28_all_rom_types() {
     run_no_cs  $hw_rev images/test/rand_8192.rom trunc,type=2708    "$extra_flags"
     run_no_cs  $hw_rev images/test/rand_8192.rom trunc,type=2716    "$extra_flags"
     run_no_cs  $hw_rev images/test/rand_8192.rom trunc,type=2732    "$extra_flags"
+
+    # Supported as of 0.6.10
+    run_test   $hw_rev images/test/rand_65536.rom trunc,type=23QL384 1 "$extra_flags"
 }
 
 test_32pin() {

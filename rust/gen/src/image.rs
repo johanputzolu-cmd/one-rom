@@ -456,7 +456,7 @@ impl Chip {
     // Transforms from a physical address (based on the hardware pins) to
     // a logical Chip address, so we store the physical Chip mapping, rather
     // than the logical one.
-    fn address_to_logical(
+    pub(crate) fn address_to_logical(
         phys_pin_to_addr_map: &[Option<usize>],
         address: usize,
         _board: &Board,
@@ -634,6 +634,7 @@ impl Chip {
             ChipType::Chip28C64 => 27,
             ChipType::Chip28C256 => 28,
             ChipType::Chip28C512 => 29,
+            ChipType::Chip23QL384 => 30,
         }
     }
 }
@@ -862,9 +863,10 @@ impl ChipSet {
                     // the same image size.
                     assert!(num_addr_pins == 18);
                     match chip.chip_type() {
-                        ChipType::Chip2364 => 2_usize.pow(18),   // 256KB
-                        ChipType::Chip231024 => 2_usize.pow(18), // 256KB
-                        _ => 2_usize.pow(16),                    // 64KB
+                        ChipType::Chip2364 | ChipType::Chip23QL384 | ChipType::Chip231024 => {
+                            2_usize.pow(18)
+                        } // 256KB
+                        _ => 2_usize.pow(16), // 64KB
                     }
                 }
             }
@@ -956,6 +958,27 @@ impl ChipSet {
                 &self.chips[chip_index].chip_type,
             );
             Self::truncate_phys_pin_to_addr_map(&mut phys_pin_to_addr_map, num_addr_lines);
+
+            let transformed = Chip::address_to_logical(
+                &phys_pin_to_addr_map,
+                masked_address,
+                board,
+                num_addr_lines,
+            );
+            if transformed >= self.chips[chip_index].chip_type.size_bytes() {
+                // Only valid for non-power-of-2 chip types (e.g. 23QL384 at 48KB), where
+                // the logical address space implied by num_addr_lines exceeds the actual
+                // chip data size.  For power-of-2 types this indicates an internal error.
+                assert!(
+                    !self.chips[chip_index]
+                        .chip_type
+                        .size_bytes()
+                        .is_power_of_two(),
+                    "Transformed address {} out of bounds for power-of-2 chip type - internal error",
+                    transformed
+                );
+                return Chip::byte_mangled(PAD_NO_CHIP_BYTE, board);
+            }
 
             return self.chips[chip_index].get_byte(&phys_pin_to_addr_map, masked_address, board);
         }
@@ -1395,7 +1418,7 @@ fn handle_snowflake_chip_types(
     chip_type: &ChipType,
 ) -> Vec<Option<usize>> {
     let mut modified_map = phys_pin_to_addr_map.to_vec();
-    if board.chip_pins() == 24 && *chip_type == ChipType::Chip2732  {
+    if board.chip_pins() == 24 && *chip_type == ChipType::Chip2732 {
         // Swap A11 and A12
         let a11_index = modified_map.iter().position(|&x| x == Some(11));
         let a12_index = modified_map.iter().position(|&x| x == Some(12));
@@ -1435,7 +1458,11 @@ fn handle_snowflake_chip_types(
         modified_map[cs1_pin] = Some(11);
         modified_map[i11] = Some(12);
         modified_map[i12] = old_cs1;
-    } else if board.chip_pins() == 28 && *chip_type != ChipType::Chip231024 && *chip_type != ChipType::Chip2364 {
+    } else if board.chip_pins() == 28
+        && *chip_type != ChipType::Chip231024
+        && *chip_type != ChipType::Chip2364
+        && *chip_type != ChipType::Chip23QL384
+    {
         // Covers 27xx chips as well as 28 pin types
 
         // Remove first two entries, and add two Nones on the end.
@@ -1476,6 +1503,17 @@ fn handle_snowflake_chip_types(
         } else {
             panic!("Address line A16 not found in phys_pin_to_addr_map for 27C301 handling");
         }
+    } else if *chip_type == ChipType::Chip23QL384 {
+        // A15 is actually the 27512's /CE line.  CS1 is actually OE.
+        let oe_pin = board.bit_oe(ChipType::Chip27512) as usize;
+        let ce_pin = board.bit_ce(ChipType::Chip27512) as usize;
+        let i15 = modified_map
+            .iter()
+            .position(|&x| x == Some(15))
+            .expect("A15 not found for 23QL384 handling");
+        modified_map[ce_pin] = Some(15);
+        modified_map[oe_pin] = None;
+        modified_map[i15] = None;
     }
     modified_map
 }

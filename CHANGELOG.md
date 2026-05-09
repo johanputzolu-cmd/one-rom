@@ -2,6 +2,11 @@
 
 All notables changes between versions are documented in this file.
 
+## v0.1.6.10 - 2026-??-??
+
+Added:
+- Support for a new composite ROM type, the 23QL384.  This serves both a 23256 and a 23128 ROM, as used in the Sinclair QL, with a single configured CS line (use active high for the Sinclair QL) and it is de-selected when A14 & A15 are both high.  It may be useful for other systems.
+
 ## v0.6.9 - 2026-05-08
 
 This release introduces support for the [ROM Bus Control Protocol](https://github.com/piersfinlayson/rom-bus-control-protocol) (RBCP), which allows retro systems to interact with and control One ROM directly.  This allows advanced functionality driven by the retro system, such as
@@ -16,7 +21,7 @@ This version of the plugin and core firmware focuses on enabling RBCP for 2364 R
 
 In order to support this functionality, this release also includes a number of other changes, including a substantial number of new plugin API functions.  Noteworthy additions include functions to:
 - collect addresses read by the host and detect "knocks" (a specific sequence of address reads) on behalf of the plugin.
-- Fpopulate and switch to additional backup RAM "slots" allowing dynamic, atomic switching between ROM images.
+- populate and switch to additional backup RAM "slots" allowing dynamic, atomic switching between ROM images.
 - allow co-operation between plugins, to allow one plugin to suspend the other, in order to perform operations that might interfere with the other plugin's operation, such as flash erasing/writing.
 
 It is believed that no non-backwards compatible changes to the plugin API have been introduced in this release, so plugins developed to older versions of the firmware should still work.  This includes the system/usb plugin.  However, there remain no guarantees of backwards compatibility for the plugin API in future releases, so if you are developing a plugin, please keep an eye on this changelog for any changes that might impact your plugin.

@@ -1,5 +1,9 @@
 # CLI Changelog
 
+## [v0.1.5] - 2025-??-??
+
+- Added support for the new 23QL384 ROM type.
+
 ## [0.1.4] - 2026-05-08
 
 - Add 2364, 2732, 2716, 2708 and 2704 support on One ROM 28 boards.  See the main [CHANGELOG](/CHANGELOG.md) for important notes on this support, including warnings about potential damage if not used correctly.

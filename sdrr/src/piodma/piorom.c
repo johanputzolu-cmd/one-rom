@@ -715,7 +715,44 @@ static void piorom_load_programs(piorom_config_t *config) {
     // configured to do so.
     APIO_SET_SM(SM_DATA_OUTPUT);
 
-    if (config->contiguous_cs_pins) {
+    if (config->rom_type == CHIP_TYPE_23QL384) {
+        // OE=GPIO8, A14=GPIO10, A15=GPIO16
+        // Active: OE=1 AND (A14=0 OR A15=0)
+        // MOV ISR, PINS reads APIO_IN_COUNT GPIOs: GPIO_n -> ISR bit n
+        // OUT shift right: OUT X,1 extracts from LSB, consuming it
+
+        // [0] inactive_start (also WRAP destination - default)
+        APIO_LABEL_NEW(ql384_inactive);
+        APIO_ADD_INSTR(APIO_MOV_PINDIRS_NULL);
+
+        // [1-10] inactive poll
+        APIO_LABEL_NEW(ql384_inactive_poll);
+        APIO_ADD_INSTR(APIO_MOV_ISR_PINS);           // [1]  bit0=OE, bit2=A14, bit8=A15
+        APIO_ADD_INSTR(APIO_MOV_OSR_ISR);            // [2]
+        APIO_ADD_INSTR(APIO_OUT_X(1));               // [3]  X = OE (bit 0)
+        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(ql384_inactive_poll))); // [4] OE=inactive, repoll
+        APIO_ADD_INSTR(APIO_OUT_X(1));               // [5]  X = A15 (bit 1, A15 here but /CE usually)
+        APIO_LABEL_NEW_OFFSET(ql384_active, 3);
+        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(ql384_active)));   // [6] low, so serve byte
+        APIO_ADD_INSTR(APIO_OUT_X(1));               // [7]  X = A14 (bit 2)
+        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(ql384_inactive_poll)));   // [8] both high, repoll
+
+        // [9] enable data lines as OE active, and A15 
+        APIO_ADD_INSTR(APIO_MOV_PINDIRS_NOT_NULL);
+
+        // [10-17] active poll
+        APIO_LABEL_NEW(ql384_active_poll);
+        APIO_ADD_INSTR(APIO_MOV_ISR_PINS);           // [10]
+        APIO_ADD_INSTR(APIO_MOV_OSR_ISR);            // [11]
+        APIO_ADD_INSTR(APIO_OUT_X(1));               // [12] X = OE
+        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(ql384_inactive)));     // [13] OE inactive → disable
+        APIO_ADD_INSTR(APIO_OUT_X(1));               // [14] X = A15
+        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(ql384_active_poll)));  // [15] A15=0 → stay
+        APIO_ADD_INSTR(APIO_OUT_X(1));               // [16] X = A14
+        APIO_WRAP_TOP();
+        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(ql384_active_poll)));  // [17] A14=0 → stay
+        // fall through wraps to [0]
+    } else if (config->contiguous_cs_pins) {
         // "Normal" case - all CS pins contiguous
         APIO_ADD_INSTR(APIO_MOV_PINDIRS_NULL);
 
@@ -820,11 +857,15 @@ static void piorom_load_programs(piorom_config_t *config) {
     } else {
         APIO_SM_EXECCTRL_SET(APIO_EXECCTRL_JMP_PIN(config->byte_pin));
     }
-    APIO_SM_SHIFTCTRL_SET(
-        APIO_IN_COUNT(config->num_cs_pins) |
-        APIO_IN_SHIFTDIR_L          // Direction left important for non-
-                                    // contiguous CS pin handling
-    );
+    if (config->rom_type != CHIP_TYPE_23QL384) {
+        APIO_SM_SHIFTCTRL_SET(
+            APIO_IN_COUNT(config->num_cs_pins) |
+            APIO_IN_SHIFTDIR_L          // Direction left important for non-
+                                        // contiguous CS pin handling
+        );
+    } else {
+        APIO_SM_SHIFTCTRL_SET(APIO_OUT_SHIFTDIR_R | APIO_IN_COUNT(9));
+    }
     APIO_SM_PINCTRL_SET(
         APIO_OUT_COUNT(config->num_data_pins) |
         APIO_OUT_BASE(base_data_pin) |
@@ -1333,6 +1374,7 @@ static void piorom_finish_config(
             break;
 
         case CHIP_TYPE_231024:
+        case CHIP_TYPE_23QL384:
             config->num_cs_pins = 1;
             break;
 
@@ -1350,6 +1392,7 @@ static void piorom_finish_config(
         case CHIP_TYPE_27C080:
             config->num_cs_pins = 3;
             break;
+
 
         default:
             ERR("PIO ROM serving invalid ROM type %d", rom->rom_type);
@@ -1526,6 +1569,10 @@ static void piorom_finish_config(
             }
             break;
 
+        case CHIP_TYPE_23QL384:
+            config->cs_base_pin = info->pins->cs2;
+            break;
+
         default:
             ERR("PIO ROM serving invalid ROM type %d", rom->rom_type);
             limp_mode(LIMP_MODE_INVALID_CONFIG);
@@ -1619,6 +1666,14 @@ static void piorom_finish_config(
         // Special case the 2364 on 28 pin ROM case:
         // - Use A16 as the CS pins, and invert it if required.
         config->cs_base_pin = info->pins->addr2[0];
+        if (rom->cs1_state == CS_ACTIVE_HIGH) {
+            config->invert_cs[0] = 1;
+        } else {
+            config->invert_cs[0] = 0;
+        }
+    }
+    if (rom->rom_type == CHIP_TYPE_23QL384) {
+        // For 23QL384, CS2 is being used as CS1 so special case the inversion test
         if (rom->cs1_state == CS_ACTIVE_HIGH) {
             config->invert_cs[0] = 1;
         } else {
@@ -1740,7 +1795,7 @@ static const piorom_config_t int_piorom_config = {
     .a_minus_1_pin = 255,
     .a_minus_1_signal_pin = 255,
     .force_16_bit = 0,
-    .pad7 = 0,
+    .rom_type = INVALID_CHIP_TYPE,
     .rom_table_addr = 0,
     .addr_reader_read_clkdiv_int = 1,
     .addr_reader_read_clkdiv_frac = 0,
@@ -1766,6 +1821,7 @@ void piorom_overrides(
     const sdrr_rom_set_t *set,
     piorom_config_t *config
 ) {
+    config->rom_type = set->roms[0]->rom_type;
     if ((set->extra_info) &&
         (set->serve_config != NULL) &&
         (set->serve_config != (void*)0xFFFFFFFF)) {
@@ -1994,6 +2050,11 @@ static void piorom_force_unused_addr_pins_to_zero(
 
         case CHIP_TYPE_27C400:
             // No NC pins - all address lines used.
+            break;
+
+        case CHIP_TYPE_23QL384:
+            // Actual addr 15 is NC.  (/CE is used as A15)
+            APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[15]);
             break;
 
         default:
