@@ -58,8 +58,6 @@ static epio_t *start_epio(void);
 #define TST_CYCLES_ADDR_BEFORE_CS_ACTIVE    6   // 40ns (+ CS delay)
 #define TST_CYCLES_CS_ACTIVE_TO_DATA_READY  6   // 40ns
 #define TST_CYCLES_AFTER_READ               6   // 40ns
-#define TST_CYCLES_CS_ACTIVE_TO_DATA_READY_23QL384  11   // 73.3ns
-#define TST_CYCLES_AFTER_READ_23QL384               11   // 73.3ns
 
 // Additional delay required for multi-ROM sets as the address can only be
 // validly retrieved after CS has gone active.  This allows for another
@@ -118,8 +116,6 @@ static int check_rom_read(
         cs_to_data_cycles = TST_CYCLES_27C400_BYTE_CS_ACTIVE_TO_DATA_READY;
     } else if (multi_rom) {
         cs_to_data_cycles = TST_CYCLES_MULTI_ROM_CS_ACTIVE_TO_DATA_READY;
-    } else if (rom_type == CHIP_TYPE_23QL384) {
-        cs_to_data_cycles = TST_CYCLES_CS_ACTIVE_TO_DATA_READY_23QL384;
     } else {
          cs_to_data_cycles = TST_CYCLES_CS_ACTIVE_TO_DATA_READY;
     }
@@ -223,11 +219,7 @@ static int check_rom_read(
         bit_mode
     );
     epio_drive_gpios_ext(epio, gpios_driven, gpio_levels);
-    if (rom_type == CHIP_TYPE_23QL384) {
-        epio_step_cycles(epio, TST_CYCLES_AFTER_READ_23QL384);
-    } else {
-        epio_step_cycles(epio, TST_CYCLES_AFTER_READ);
-    }
+    epio_step_cycles(epio, TST_CYCLES_AFTER_READ);
 
     inc_progress();
 

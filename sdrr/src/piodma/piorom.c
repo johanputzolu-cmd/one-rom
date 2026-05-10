@@ -716,42 +716,38 @@ static void piorom_load_programs(piorom_config_t *config) {
     APIO_SET_SM(SM_DATA_OUTPUT);
 
     if (config->rom_type == CHIP_TYPE_23QL384) {
-        // OE=GPIO8, A14=GPIO10, A15=GPIO16
+        // OE=GPIO8, A14=GPIO10, A15=GPIO9
         // Active: OE=1 AND (A14=0 OR A15=0)
-        // MOV ISR, PINS reads APIO_IN_COUNT GPIOs: GPIO_n -> ISR bit n
-        // OUT shift right: OUT X,1 extracts from LSB, consuming it
+        // Use OE as the JMP pin and IN pins A15+A14
 
-        // [0] inactive_start (also WRAP destination - default)
+        // Y is preloaded below with 0b11 - the value of A15+A14 when the chip
+        // should be inactive
+
+        // Set data pins to inputs
         APIO_LABEL_NEW(ql384_inactive);
         APIO_ADD_INSTR(APIO_MOV_PINDIRS_NULL);
 
-        // [1-10] inactive poll
+        // If OE is inactive, wait.  Note that OE active high is hardware
+        // inverted so active always reads low
         APIO_LABEL_NEW(ql384_inactive_poll);
-        APIO_ADD_INSTR(APIO_MOV_ISR_PINS);           // [1]  bit0=OE, bit2=A14, bit8=A15
-        APIO_ADD_INSTR(APIO_MOV_OSR_ISR);            // [2]
-        APIO_ADD_INSTR(APIO_OUT_X(1));               // [3]  X = OE (bit 0)
-        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(ql384_inactive_poll))); // [4] OE=inactive, repoll
-        APIO_ADD_INSTR(APIO_OUT_X(1));               // [5]  X = A15 (bit 1, A15 here but /CE usually)
-        APIO_LABEL_NEW_OFFSET(ql384_active, 3);
-        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(ql384_active)));   // [6] low, so serve byte
-        APIO_ADD_INSTR(APIO_OUT_X(1));               // [7]  X = A14 (bit 2)
-        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(ql384_inactive_poll)));   // [8] both high, repoll
+        APIO_ADD_INSTR(APIO_JMP_PIN(APIO_LABEL(ql384_inactive_poll)));   // OE=1, so stay inactive until it goes active
 
-        // [9] enable data lines as OE active, and A15 
+        APIO_ADD_INSTR(APIO_MOV_X_PINS);           // Read pins to X - A14 and A15
+        APIO_LABEL_NEW_OFFSET(ql384_active, 2);
+        APIO_ADD_INSTR(APIO_JMP_X_NOT_Y(APIO_LABEL(ql384_active))); // If A14 or A15 is low, go active, otherwise stay inactive
+        APIO_ADD_INSTR(APIO_JMP(APIO_LABEL(ql384_inactive_poll)));  // A14 & A15 are both high
+
+        // APIO_LABEL(ql384_active)
+        // OE is active, and A14 or A15 (or both) are low
+        // Set data pins to outputs
         APIO_ADD_INSTR(APIO_MOV_PINDIRS_NOT_NULL);
 
-        // [10-17] active poll
+        // Now wait for OE to go inactive or both A14 and A15 to go high
         APIO_LABEL_NEW(ql384_active_poll);
-        APIO_ADD_INSTR(APIO_MOV_ISR_PINS);           // [10]
-        APIO_ADD_INSTR(APIO_MOV_OSR_ISR);            // [11]
-        APIO_ADD_INSTR(APIO_OUT_X(1));               // [12] X = OE
-        APIO_ADD_INSTR(APIO_JMP_X_DEC(APIO_LABEL(ql384_inactive)));     // [13] OE inactive → disable
-        APIO_ADD_INSTR(APIO_OUT_X(1));               // [14] X = A15
-        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(ql384_active_poll)));  // [15] A15=0 → stay
-        APIO_ADD_INSTR(APIO_OUT_X(1));               // [16] X = A14
+        APIO_ADD_INSTR(APIO_JMP_PIN(APIO_LABEL(ql384_inactive)));   // OE has gone inactive
+        APIO_ADD_INSTR(APIO_MOV_X_PINS);           // Read pins to X - A14 and A15
         APIO_WRAP_TOP();
-        APIO_ADD_INSTR(APIO_JMP_NOT_X(APIO_LABEL(ql384_active_poll)));  // [17] A14=0 → stay
-        // fall through wraps to [0]
+        APIO_ADD_INSTR(APIO_JMP_X_NOT_Y(APIO_LABEL(ql384_active_poll)));   // If A14 or A15 goes low, stay active, otherwise go inactive
     } else if (config->contiguous_cs_pins) {
         // "Normal" case - all CS pins contiguous
         APIO_ADD_INSTR(APIO_MOV_PINDIRS_NULL);
@@ -853,7 +849,12 @@ static void piorom_load_programs(piorom_config_t *config) {
         config->data_io_clkdiv_frac
     );
     if (config->bit_mode == BIT_MODE_8) {
-        APIO_SM_EXECCTRL_SET(0);
+        if (config->rom_type != CHIP_TYPE_23QL384) {
+            APIO_SM_EXECCTRL_SET(0);
+        } else {
+            // Use OE as our JMP pin
+            APIO_SM_EXECCTRL_SET(APIO_EXECCTRL_JMP_PIN(config->cs_base_pin));
+        }
     } else {
         APIO_SM_EXECCTRL_SET(APIO_EXECCTRL_JMP_PIN(config->byte_pin));
     }
@@ -863,14 +864,24 @@ static void piorom_load_programs(piorom_config_t *config) {
             APIO_IN_SHIFTDIR_L          // Direction left important for non-
                                         // contiguous CS pin handling
         );
+        APIO_SM_PINCTRL_SET(
+            APIO_OUT_COUNT(config->num_data_pins) |
+            APIO_OUT_BASE(base_data_pin) |
+            APIO_IN_BASE(config->cs_base_pin)
+        );
     } else {
-        APIO_SM_SHIFTCTRL_SET(APIO_OUT_SHIFTDIR_R | APIO_IN_COUNT(9));
+        // Use A14 and A15 as the CS pins, and they immediate follow OE
+        APIO_SM_SHIFTCTRL_SET(
+            APIO_IN_COUNT(2) |
+            APIO_IN_SHIFTDIR_L          // Direction left important for non-
+                                        // contiguous CS pin handling
+        );
+        APIO_SM_PINCTRL_SET(
+            APIO_OUT_COUNT(config->num_data_pins) |
+            APIO_OUT_BASE(base_data_pin) |
+            APIO_IN_BASE(config->cs_base_pin+1)
+        );
     }
-    APIO_SM_PINCTRL_SET(
-        APIO_OUT_COUNT(config->num_data_pins) |
-        APIO_OUT_BASE(base_data_pin) |
-        APIO_IN_BASE(config->cs_base_pin)
-    );
 
     if ((config->bit_mode == BIT_MODE_16) && (!force_16_bit)) {
         // For 16 bit mode, we use the Y register to control whether we set all
@@ -879,6 +890,11 @@ static void piorom_load_programs(piorom_config_t *config) {
         APIO_TXF = 0xFF;
         APIO_SM_EXEC_INSTR(APIO_PULL_BLOCK);
         APIO_SM_EXEC_INSTR(APIO_MOV_Y_OSR);
+    }
+    if (config->rom_type == CHIP_TYPE_23QL384) {
+        // Preload Y with 0b11, the value of A15+A14 when chip should be
+        // inactive
+        APIO_SM_EXEC_INSTR(APIO_SET_Y(0b11));
     }
 
     // Jump to start and log
