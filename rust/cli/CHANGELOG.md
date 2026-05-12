@@ -1,6 +1,6 @@
 # CLI Changelog
 
-## [v0.1.5] - 2025-??-??
+## [v0.1.5] - 2025-05-12
 
 - Added _prototype_ support for the new 23QL384 ROM type.  May be deprecated or modified in a future release.
 - Add support for `onerom program .. --scan-slots` to auto-run `onerom scan --slots` after programming. 

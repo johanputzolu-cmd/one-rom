@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.19 - 2026-??-??
+## v0.1.19 - 2026-05-12
 
 - Added _prototype_ support for the new 23QL384 ROM type.  May be deprecated or modified in a future release.
 
