@@ -47,7 +47,7 @@ pub trait Board {
     #[cfg(feature = "pin-28")]
     fn addr_pins(&self) -> [Flex<'static>; 16];
     #[cfg(feature = "pin-24")]
-    fn addr_pins(&self) -> [Flex<'static>; 13];
+    fn addr_pins(&self) -> [Flex<'static>; 12];
     // Ordered D0-D7
     fn data_pins(&self) -> [Flex<'static>; 8];
     // /OE and /CE in that order, then CSn if unique pins
@@ -295,7 +295,7 @@ impl Board for Fire24E {
         Self {}
     }
 
-    fn addr_pins(&self) -> [Flex<'static>; 13] {
+    fn addr_pins(&self) -> [Flex<'static>; 12] {
         [
             Flex::new(unsafe { PIN_23::steal() }),
             Flex::new(unsafe { PIN_22::steal() }),
@@ -308,7 +308,7 @@ impl Board for Fire24E {
             Flex::new(unsafe { PIN_15::steal() }),
             Flex::new(unsafe { PIN_14::steal() }),
             Flex::new(unsafe { PIN_13::steal() }),
-            Flex::new(unsafe { PIN_11::steal() }),
+            //Flex::new(unsafe { PIN_11::steal() }),
             Flex::new(unsafe { PIN_12::steal() }),
         ]
     }
