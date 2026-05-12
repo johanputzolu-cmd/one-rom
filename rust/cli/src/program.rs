@@ -236,6 +236,15 @@ pub async fn cmd_program(
         reboot_and_rescan(options, &args.into()).await?;
         println!("Programming complete");
 
+        if args.scan_slots && let Some(device) = options.device.as_ref() {
+            println!("Reading device after programming...");
+            crate::inspect::output_slot_info(device, options, "")
+                .inspect_err(|_| log::error!("Failed to read slots after programming"))?;
+        } else {
+            eprintln!("Failed to read device after programming");
+            return Err(Error::NoDevice);
+        }
+
         if !args.batch {
             break;
         }

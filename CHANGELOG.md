@@ -2,10 +2,13 @@
 
 All notables changes between versions are documented in this file.
 
-## v0.1.6.10 - 2026-??-??
+## v0.1.6.10 - 2026-05-12
 
 Added:
-- Support for a new composite ROM type, the 23QL384.  This serves both a 23256 and a 23128 ROM, as used in the Sinclair QL, with a single configured CS line (use active high for the Sinclair QL) and it is de-selected when A14 & A15 are both high.  It may be useful for other systems.
+- Support _protoype_ support for a new composite ROM type, the 23QL384.  This serves both a 23256 and a 23128 ROM, as used in the Sinclair QL, with a single configured CS line (use active high for the Sinclair QL) and it is de-selected when A14 & A15 are both high.  It may be useful for other systems.  This ROM type may be deprecated or modified in a future release.
+
+Fixed:
+- Added longer filtering/debounce support for knock detection, to work more reliably on different Commodore 64s.
 
 ## v0.6.9 - 2026-05-08
 

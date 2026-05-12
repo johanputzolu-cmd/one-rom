@@ -208,6 +208,11 @@ pub struct ProgramArgs {
     /// including board config, as the first board.
     #[arg(long, visible_aliases = ["multiple", "multi"])]
     pub batch: bool,
+
+    /// After programming, automatically run `onerom scan --slots` to output
+    /// the contents of the programmed One ROM.
+    #[arg(long, conflicts_with = "fast")]
+    pub scan_slots: bool,
 }
 
 impl CommandTrait for ProgramArgs {
