@@ -55,7 +55,7 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # WASM-specific flags (no sanitizer, add EPIO_WASM define)
 WASM_CFLAGS := -DAPIO_EMULATION=1 -DTEST_BUILD=1 -DONEROM_LENS \
 			$(EXTRA_C_FLAGS) -I include -I $(OUTPUT_DIR) -I include/test \
-			-I apio/include -I epio/include \
+			-I apio/include -I epio/include -I ora \
 			-DSDRR_VERSION_MAJOR=$(VERSION_MAJOR) -DSDRR_VERSION_MINOR=$(VERSION_MINOR) \
 			-DSDRR_VERSION_PATCH=$(VERSION_PATCH) -DSDRR_BUILD_NUMBER=$(BUILD_NUMBER) \
 			-DSDRR_GIT_COMMIT=\"$(GIT_COMMIT)\" \
