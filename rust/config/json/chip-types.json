@@ -1337,7 +1337,9 @@
             "function": "ROM",
             "supported": "0.6.6",
             "aliases": [
-                "27C4001"
+                "27C4001",
+                "HN62404",
+                "HN62424"
             ],
             "bit_modes": [8],
             "pins": 32,
