@@ -22,7 +22,7 @@ SUBSYSTEM!="usb|tty|hidraw", GOTO="onerom_cli_rules_end"
 ATTRS{idVendor}=="1209", ATTRS{idProduct}=="f540", MODE="660", GROUP="plugdev", TAG+="uaccess"
 
 # One ROM
-ATTRS{idVendor}=="1209", ATTRS{idProduct}=="f540", MODE="660", GROUP="plugdev", TAG+="uaccess"
+ATTRS{idVendor}=="1209", ATTRS{idProduct}=="f542", MODE="660", GROUP="plugdev", TAG+="uaccess"
 
 # RP2350
 ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000f", MODE="660", GROUP="plugdev", TAG+="uaccess"
