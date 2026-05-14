@@ -315,11 +315,7 @@ impl ChipType {
             });
         }
 
-        let expected_size = if type_name != "23QL384" {
-            1usize << self.address.len()
-        } else {
-            49152
-        };
+        let expected_size = 1usize << self.address.len();
 
         if expected_size != self.size {
             return Err(ValidationError::AddressSizeMismatch {

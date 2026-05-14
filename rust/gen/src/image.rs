@@ -634,7 +634,7 @@ impl Chip {
             ChipType::Chip28C64 => 27,
             ChipType::Chip28C256 => 28,
             ChipType::Chip28C512 => 29,
-            ChipType::Chip23QL384 => 30,
+            ChipType::Chip23QL512 => 30,
         }
     }
 }
@@ -863,9 +863,10 @@ impl ChipSet {
                     // the same image size.
                     assert!(num_addr_pins == 18);
                     match chip.chip_type() {
-                        ChipType::Chip2364 | ChipType::Chip23QL384 | ChipType::Chip231024 => {
+                        ChipType::Chip2364 | ChipType::Chip231024 => {
                             2_usize.pow(18)
-                        } // 256KB
+                        } 
+                        ChipType::Chip23QL512 => 2_usize.pow(17),
                         _ => 2_usize.pow(16), // 64KB
                     }
                 }
@@ -1461,7 +1462,7 @@ fn handle_snowflake_chip_types(
     } else if board.chip_pins() == 28
         && *chip_type != ChipType::Chip231024
         && *chip_type != ChipType::Chip2364
-        && *chip_type != ChipType::Chip23QL384
+        && *chip_type != ChipType::Chip23QL512
     {
         // Covers 27xx chips as well as 28 pin types
 
@@ -1503,17 +1504,21 @@ fn handle_snowflake_chip_types(
         } else {
             panic!("Address line A16 not found in phys_pin_to_addr_map for 27C301 handling");
         }
-    } else if *chip_type == ChipType::Chip23QL384 {
+    } else if *chip_type == ChipType::Chip23QL512 {
         // A15 is actually the 27512's /CE line.  CS1 is actually OE.
         let oe_pin = board.bit_oe(ChipType::Chip27512) as usize;
         let ce_pin = board.bit_ce(ChipType::Chip27512) as usize;
         let i15 = modified_map
             .iter()
             .position(|&x| x == Some(15))
-            .expect("A15 not found for 23QL384 handling");
+            .expect("A15 not found for 23QL512 handling");
         modified_map[ce_pin] = Some(15);
         modified_map[oe_pin] = None;
         modified_map[i15] = None;
+
+        // And we start indexing the image from the second address/cs pin, not the first.
+        modified_map.remove(0);
+        modified_map.push(None);
     }
     modified_map
 }

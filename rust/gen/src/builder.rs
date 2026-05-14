@@ -54,7 +54,7 @@ pub const SUPPORTED_CHIP_TYPES: &[ChipType; 32] = &[
     ChipType::Chip28C512,
     ChipType::Chip23C1010,
     ChipType::Chip27C080,
-    ChipType::Chip23QL384,
+    ChipType::Chip23QL512,
 ];
 
 pub(crate) use crate::firmware::*;

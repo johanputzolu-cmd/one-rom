@@ -321,13 +321,13 @@
                 }
             ]
         },
-        "23QL384": {
-            "description": "A composite ROM type, serving a combined 23256 and 23128 for the Sinclair QL, with a single configured CS line and is de-selected when A14 & A15 are both high",
+        "23QL512": {
+            "description": "A composite ROM type, serving two combined 23256s for the Sinclair QL, with a single configured CS line at pin 22, and A15 at pin 20 instead of pin 1",
             "function": "ROM",
-            "supported": "0.6.10",
+            "supported": "0.6.11",
             "bit_modes": [8],
             "pins": 28,
-            "size": 49152,
+            "size": 65536,
             "address": [
                 10,
                 9,

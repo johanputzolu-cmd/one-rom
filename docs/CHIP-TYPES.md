@@ -45,8 +45,8 @@ There are also some other inconsistencies between types:
 |-----------|---------|------|---------------|---------------|-------------|-----------|
 | 23128 |  | 16KB | 14 (A0-A13) | CS1 (pin 20), CS2 (pin 22), CS3 (pin 27) | None | ✓ |
 | 23256 |  | 32KB | 15 (A0-A14) | CS1 (pin 20), CS2 (pin 22) | None | ✓ |
-| 23QL384 |  | 48KB | 16 (A0-A15) | CS1 (pin 22) | None | ✓ |
 | 23512 |  | 64KB | 16 (A0-A15) | CS1 (pin 20), CS2 (pin 22) | None | ✓ |
+| 23QL512 |  | 64KB | 16 (A0-A15) | CS1 (pin 22) | None | ✓ |
 | 231024 | TC531000 | 128KB | 17 (A0-A16) | CS1 (pin 20) | None | ✓ |
 
 ## 32-pin Mask ROM Family (23xx)
@@ -147,9 +147,9 @@ There are also some other inconsistencies between types:
 
 ### 28-pin Package
 
-| Pin | 23128 | 23256 | 23QL384 | 23512 | 231024 | 2764 | 28C64 | 27128 | 27256 | 28C256 | 27512 |
+| Pin | 23128 | 23256 | 23512 | 23QL512 | 231024 | 2764 | 28C64 | 27128 | 27256 | 28C256 | 27512 |
 |-----|------|------|------|------|------|------|------|------|------|------|------|
-| 1 | NC | NC | NC | A15 | A15 | VPP | /BUSY | VPP | VPP | A14 | A15 |
+| 1 | NC | NC | A15 | NC | A15 | VPP | /BUSY | VPP | VPP | A14 | A15 |
 | 2 | A12 | A12 | A12 | A12 | A12 | A12 | A12 | A12 | A12 | A12 | A12 |
 | 3 | A7 | A7 | A7 | A7 | A7 | A7 | A7 | A7 | A7 | A7 | A7 |
 | 4 | A6 | A6 | A6 | A6 | A6 | A6 | A6 | A6 | A6 | A6 | A6 |
@@ -168,9 +168,9 @@ There are also some other inconsistencies between types:
 | 17 | D5 | D5 | D5 | D5 | D5 | D5 | D5 | D5 | D5 | D5 | D5 |
 | 18 | D6 | D6 | D6 | D6 | D6 | D6 | D6 | D6 | D6 | D6 | D6 |
 | 19 | D7 | D7 | D7 | D7 | D7 | D7 | D7 | D7 | D7 | D7 | D7 |
-| 20 | CS1 | CS1 | A15 | CS1 | CS1 | /CE | /CE | /CE | /CE | /CE | /CE+PE |
+| 20 | CS1 | CS1 | CS1 | A15 | CS1 | /CE | /CE | /CE | /CE | /CE | /CE+PE |
 | 21 | A10 | A10 | A10 | A10 | A10 | A10 | A10 | A10 | A10 | A10 | A10 |
-| 22 | CS2 | CS2 | CS1 | CS2 | A16 | /OE | /OE | /OE | /OE+PE | /OE | /OE+VPP |
+| 22 | CS2 | CS2 | CS2 | CS1 | A16 | /OE | /OE | /OE | /OE+PE | /OE | /OE+VPP |
 | 23 | A11 | A11 | A11 | A11 | A11 | A11 | A11 | A11 | A11 | A11 | A11 |
 | 24 | A9 | A9 | A9 | A9 | A9 | A9 | A9 | A9 | A9 | A9 | A9 |
 
@@ -310,20 +310,6 @@ There are also some other inconsistencies between types:
 | VCC | 28 | +5V |
 | GND | 14 | 0V |
 
-### 23QL384 - A composite ROM type, serving a combined 23256 and 23128 for the Sinclair QL, with a single configured CS line and is de-selected when A14 & A15 are both high
-
-**Package:** 28-pin DIP  
-**Capacity:** 49152 bytes  
-**Control:** 1 configurable CS line  
-
-| Function | Pins | Notes |
-|----------|------|-------|
-| Address (A0-A15) | 10,9,8,7,6,5,4,3,25,24,21,23,2,26,27,20 | 16 address lines |
-| Data (D0-D7) | 11,12,13,15,16,17,18,19 | 8 data lines |
-| CS1 | 22 | Configurable polarity |
-| VCC | 28 | +5V |
-| GND | 14 | 0V |
-
 ### 23512 - 64KB mask ROM with 2 configurable CS lines
 
 **Package:** 28-pin DIP  
@@ -336,6 +322,20 @@ There are also some other inconsistencies between types:
 | Data (D0-D7) | 11,12,13,15,16,17,18,19 | 8 data lines |
 | CS1 | 20 | Configurable polarity |
 | CS2 | 22 | Configurable polarity |
+| VCC | 28 | +5V |
+| GND | 14 | 0V |
+
+### 23QL512 - A composite ROM type, serving two combined 23256s for the Sinclair QL, with a single configured CS line at pin 22, and A15 at pin 20 instead of pin 1
+
+**Package:** 28-pin DIP  
+**Capacity:** 65536 bytes  
+**Control:** 1 configurable CS line  
+
+| Function | Pins | Notes |
+|----------|------|-------|
+| Address (A0-A15) | 10,9,8,7,6,5,4,3,25,24,21,23,2,26,27,20 | 16 address lines |
+| Data (D0-D7) | 11,12,13,15,16,17,18,19 | 8 data lines |
+| CS1 | 22 | Configurable polarity |
 | VCC | 28 | +5V |
 | GND | 14 | 0V |
 

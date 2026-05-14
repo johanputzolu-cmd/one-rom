@@ -323,9 +323,9 @@ pub enum SdrrRomType {
     #[deku(id = "29")]
     Rom28C512,
 
-    // 23QL384
+    // 23QL512
     #[deku(id = "30")]
-    Rom23QL384,
+    Rom23QL512,
 }
 
 impl fmt::Display for SdrrRomType {
@@ -361,7 +361,7 @@ impl fmt::Display for SdrrRomType {
             SdrrRomType::Rom28C64 => write!(f, "28C64"),
             SdrrRomType::Rom28C256 => write!(f, "28C256"),
             SdrrRomType::Rom28C512 => write!(f, "28C512"),
-            SdrrRomType::Rom23QL384 => write!(f, "23QL384"),
+            SdrrRomType::Rom23QL512 => write!(f, "23QL512"),
         }
     }
 }
@@ -408,7 +408,7 @@ impl SdrrRomType {
             SdrrRomType::Rom28C64 => 8,
             SdrrRomType::Rom28C256 => 32,
             SdrrRomType::Rom28C512 => 64,
-            SdrrRomType::Rom23QL384 => 48,
+            SdrrRomType::Rom23QL512 => 48,
         }
     }
 
@@ -445,7 +445,7 @@ impl SdrrRomType {
             SdrrRomType::Rom28C64 => 28,
             SdrrRomType::Rom28C256 => 28,
             SdrrRomType::Rom28C512 => 32,
-            SdrrRomType::Rom23QL384 => 28,
+            SdrrRomType::Rom23QL512 => 28,
         }
     }
 
@@ -487,7 +487,7 @@ impl SdrrRomType {
             SdrrRomType::Rom28C64 => false,
             SdrrRomType::Rom28C256 => false,
             SdrrRomType::Rom28C512 => false,
-            SdrrRomType::Rom23QL384 => false,
+            SdrrRomType::Rom23QL512 => false,
         }
     }
 
@@ -524,7 +524,7 @@ impl SdrrRomType {
             SdrrRomType::Rom28C64 => false,
             SdrrRomType::Rom28C256 => false,
             SdrrRomType::Rom28C512 => false,
-            SdrrRomType::Rom23QL384 => false,
+            SdrrRomType::Rom23QL512 => false,
         }
     }
 }

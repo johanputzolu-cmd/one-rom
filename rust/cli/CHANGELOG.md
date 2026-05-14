@@ -1,5 +1,10 @@
 # CLI Changelog
 
+## v0.1.6 - 2026-05-14
+
+- Moved 23QL384 support to a 23QL512 type.
+- Fixed bug introduced in 0.1.5 where a (benign) error is reported requerying One ROM after programming.
+
 ## [v0.1.5] - 2025-05-12
 
 - Added _prototype_ support for the new 23QL384 ROM type.  May be deprecated or modified in a future release.

@@ -715,40 +715,7 @@ static void piorom_load_programs(piorom_config_t *config) {
     // configured to do so.
     APIO_SET_SM(SM_DATA_OUTPUT);
 
-    if (config->rom_type == CHIP_TYPE_23QL384) {
-        // OE=GPIO8, A14=GPIO10, A15=GPIO9
-        // Active: OE=1 AND (A14=0 OR A15=0)
-        // Use OE as the JMP pin and IN pins A15+A14
-
-        // Y is preloaded below with 0b11 - the value of A15+A14 when the chip
-        // should be inactive
-
-        // Set data pins to inputs
-        APIO_LABEL_NEW(ql384_inactive);
-        APIO_ADD_INSTR(APIO_MOV_PINDIRS_NULL);
-
-        // If OE is inactive, wait.  Note that OE active high is hardware
-        // inverted so active always reads low
-        APIO_LABEL_NEW(ql384_inactive_poll);
-        APIO_ADD_INSTR(APIO_JMP_PIN(APIO_LABEL(ql384_inactive_poll)));   // OE=1, so stay inactive until it goes active
-
-        APIO_ADD_INSTR(APIO_MOV_X_PINS);           // Read pins to X - A14 and A15
-        APIO_LABEL_NEW_OFFSET(ql384_active, 2);
-        APIO_ADD_INSTR(APIO_JMP_X_NOT_Y(APIO_LABEL(ql384_active))); // If A14 or A15 is low, go active, otherwise stay inactive
-        APIO_ADD_INSTR(APIO_JMP(APIO_LABEL(ql384_inactive_poll)));  // A14 & A15 are both high
-
-        // APIO_LABEL(ql384_active)
-        // OE is active, and A14 or A15 (or both) are low
-        // Set data pins to outputs
-        APIO_ADD_INSTR(APIO_MOV_PINDIRS_NOT_NULL);
-
-        // Now wait for OE to go inactive or both A14 and A15 to go high
-        APIO_LABEL_NEW(ql384_active_poll);
-        APIO_ADD_INSTR(APIO_JMP_PIN(APIO_LABEL(ql384_inactive)));   // OE has gone inactive
-        APIO_ADD_INSTR(APIO_MOV_X_PINS);           // Read pins to X - A14 and A15
-        APIO_WRAP_TOP();
-        APIO_ADD_INSTR(APIO_JMP_X_NOT_Y(APIO_LABEL(ql384_active_poll)));   // If A14 or A15 goes low, stay active, otherwise go inactive
-    } else if (config->contiguous_cs_pins) {
+    if (config->contiguous_cs_pins) {
         // "Normal" case - all CS pins contiguous
         APIO_ADD_INSTR(APIO_MOV_PINDIRS_NULL);
 
@@ -849,39 +816,20 @@ static void piorom_load_programs(piorom_config_t *config) {
         config->data_io_clkdiv_frac
     );
     if (config->bit_mode == BIT_MODE_8) {
-        if (config->rom_type != CHIP_TYPE_23QL384) {
-            APIO_SM_EXECCTRL_SET(0);
-        } else {
-            // Use OE as our JMP pin
-            APIO_SM_EXECCTRL_SET(APIO_EXECCTRL_JMP_PIN(config->cs_base_pin));
-        }
+        APIO_SM_EXECCTRL_SET(0);
     } else {
         APIO_SM_EXECCTRL_SET(APIO_EXECCTRL_JMP_PIN(config->byte_pin));
     }
-    if (config->rom_type != CHIP_TYPE_23QL384) {
-        APIO_SM_SHIFTCTRL_SET(
-            APIO_IN_COUNT(config->num_cs_pins) |
-            APIO_IN_SHIFTDIR_L          // Direction left important for non-
-                                        // contiguous CS pin handling
-        );
-        APIO_SM_PINCTRL_SET(
-            APIO_OUT_COUNT(config->num_data_pins) |
-            APIO_OUT_BASE(base_data_pin) |
-            APIO_IN_BASE(config->cs_base_pin)
-        );
-    } else {
-        // Use A14 and A15 as the CS pins, and they immediate follow OE
-        APIO_SM_SHIFTCTRL_SET(
-            APIO_IN_COUNT(2) |
-            APIO_IN_SHIFTDIR_L          // Direction left important for non-
-                                        // contiguous CS pin handling
-        );
-        APIO_SM_PINCTRL_SET(
-            APIO_OUT_COUNT(config->num_data_pins) |
-            APIO_OUT_BASE(base_data_pin) |
-            APIO_IN_BASE(config->cs_base_pin+1)
-        );
-    }
+    APIO_SM_SHIFTCTRL_SET(
+        APIO_IN_COUNT(config->num_cs_pins) |
+        APIO_IN_SHIFTDIR_L          // Direction left important for non-
+                                    // contiguous CS pin handling
+    );
+    APIO_SM_PINCTRL_SET(
+        APIO_OUT_COUNT(config->num_data_pins) |
+        APIO_OUT_BASE(base_data_pin) |
+        APIO_IN_BASE(config->cs_base_pin)
+    );
 
     if ((config->bit_mode == BIT_MODE_16) && (!force_16_bit)) {
         // For 16 bit mode, we use the Y register to control whether we set all
@@ -890,11 +838,6 @@ static void piorom_load_programs(piorom_config_t *config) {
         APIO_TXF = 0xFF;
         APIO_SM_EXEC_INSTR(APIO_PULL_BLOCK);
         APIO_SM_EXEC_INSTR(APIO_MOV_Y_OSR);
-    }
-    if (config->rom_type == CHIP_TYPE_23QL384) {
-        // Preload Y with 0b11, the value of A15+A14 when chip should be
-        // inactive
-        APIO_SM_EXEC_INSTR(APIO_SET_Y(0b11));
     }
 
     // Jump to start and log
@@ -1241,7 +1184,7 @@ static uint8_t get_lowest_addr_gpio(
         // pins to consider, not the ROM type.  This is because some version of
         // Studio uses 256KB images for <231024 ROMS.  However, since 0.6.4,
         // only a 231024 _needs_ a 256KB image.
-        if (img_size > (64*1024)) {
+        if (img_size > (128*1024)) {
             // Consider addr2 pins, but only when serving a > 64KB image, as
             // for 28 pin ROMs, these are only used in this case.
             for (int ii = 0; ii < 8; ii++) {
@@ -1269,7 +1212,7 @@ static uint8_t get_lowest_addr_gpio(
     }
 
     if ((chip_pins == 24) ||
-        ((chip_pins == 28) && (img_size > (64*1024)))) {
+        ((chip_pins == 28) && (img_size >= (256*1024)))) {
         // Consider CS pins - only need to check the base as this will be the
         // lowest.
         //
@@ -1279,6 +1222,11 @@ static uint8_t get_lowest_addr_gpio(
         // sufficient.
         if (cs_base_pin < lowest) {
             lowest = cs_base_pin;
+        }
+    } else if (rom_type == CHIP_TYPE_23QL512) {
+        // A15 is actually in the CE location.
+        if (info->pins->ce < lowest) {
+            lowest = info->pins->ce;
         }
     }
 
@@ -1390,7 +1338,7 @@ static void piorom_finish_config(
             break;
 
         case CHIP_TYPE_231024:
-        case CHIP_TYPE_23QL384:
+        case CHIP_TYPE_23QL512:
             config->num_cs_pins = 1;
             break;
 
@@ -1585,7 +1533,7 @@ static void piorom_finish_config(
             }
             break;
 
-        case CHIP_TYPE_23QL384:
+        case CHIP_TYPE_23QL512:
             config->cs_base_pin = info->pins->cs2;
             break;
 
@@ -1688,8 +1636,8 @@ static void piorom_finish_config(
             config->invert_cs[0] = 0;
         }
     }
-    if (rom->rom_type == CHIP_TYPE_23QL384) {
-        // For 23QL384, CS2 is being used as CS1 so special case the inversion test
+    if (rom->rom_type == CHIP_TYPE_23QL512) {
+        // For 23QL512, CS2 is being used as CS1 so special case the inversion test
         if (rom->cs1_state == CS_ACTIVE_HIGH) {
             config->invert_cs[0] = 1;
         } else {
@@ -1725,8 +1673,11 @@ static void piorom_finish_config(
         // pins to consider, not the ROM type.  This is because some version of
         // Studio uses 256KB images for <231024 ROMS.  However, since 0.6.4,
         // only a 231024 _needs_ a 256KB image.
-        if (img_size > (64*1024)) {
+        if (img_size > (128*1024)) {
             config->num_addr_pins = 18; // Includes OE/CE (OE also A16 for 231024)
+        } else if (img_size > (64*1024)) {
+            // 23QL512.  Doesn't include OE which is the first pin.
+            config->num_addr_pins = 17;
         } else {
             config->num_addr_pins = 16; // Doesn't include OE/CE
         }
@@ -2068,7 +2019,7 @@ static void piorom_force_unused_addr_pins_to_zero(
             // No NC pins - all address lines used.
             break;
 
-        case CHIP_TYPE_23QL384:
+        case CHIP_TYPE_23QL512:
             // Actual addr 15 is NC.  (/CE is used as A15)
             APIO_GPIO_FORCE_INPUT_LOW(info->pins->addr[15]);
             break;
@@ -2509,6 +2460,9 @@ ora_result_t pio_demangle_addr(
         }
     }
 
+    // 23QL512 not supported here, nor are other chip types like the 231024,
+    // 2732 - any snowflake chip type
+    // TODO - lift restriction
     uint32_t logical = 0;
     for (uint8_t b = 0; b < num; b++) {
         uint8_t pin;

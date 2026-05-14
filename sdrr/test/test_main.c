@@ -130,7 +130,7 @@ static int check_rom_read(
             rom_type == CHIP_TYPE_23256 ||
             rom_type == CHIP_TYPE_23512 ||
             rom_type == CHIP_TYPE_231024 ||
-            rom_type == CHIP_TYPE_23QL384 ||
+            rom_type == CHIP_TYPE_23QL512 ||
             rom_type == CHIP_TYPE_27C080
         );
 
@@ -175,34 +175,27 @@ static int check_rom_read(
 
     // Check the data lines are being actively driven
     int rc = 0;
-    if (rom_type != CHIP_TYPE_23QL384 || addr < chip_size_from_type[rom_type]) {
-        // For 23QL384, the upper 16KB of the 64KB address space is not actually
-        // backed by ROM and won't drive data lines, so skip the check in that
-        // case.
-        check_data_pins_driven(epio, bit_mode);
+    check_data_pins_driven(epio, bit_mode);
 
-        // Read the data lines
-        uint64_t gpio_out = epio_read_pin_states(epio);
-        uint32_t data = get_byte_from_gpio(gpio_out, bit_mode);
+    // Read the data lines
+    uint64_t gpio_out = epio_read_pin_states(epio);
+    uint32_t data = get_byte_from_gpio(gpio_out, bit_mode);
 
-        // Test whether we got the expected data
-        uint16_t expected_data;
-        if (bit_mode == 16) {
-            // Construct from the two appropriate bytes in the ROM image
-            expected_data = 
-                (uint16_t)get_rom_image_data_byte(set_index, rom_index, addr * 2) |
-                ((uint16_t)get_rom_image_data_byte(set_index, rom_index, addr * 2 + 1) << 8);
-        } else {
-            expected_data = get_rom_image_data_byte(set_index, rom_index, addr);
-        }
-        if (data != expected_data) {
-            if (get_progress() < 5) {
-                TST_LOG("ROM Read Mismatch: 0x%08X expected 0x%04X got 0x%04X", addr, expected_data, data);
-            }
-            rc = 1;
-        }
+    // Test whether we got the expected data
+    uint16_t expected_data;
+    if (bit_mode == 16) {
+        // Construct from the two appropriate bytes in the ROM image
+        expected_data = 
+            (uint16_t)get_rom_image_data_byte(set_index, rom_index, addr * 2) |
+            ((uint16_t)get_rom_image_data_byte(set_index, rom_index, addr * 2 + 1) << 8);
     } else {
-        check_data_pins_undriven(epio, bit_mode);
+        expected_data = get_rom_image_data_byte(set_index, rom_index, addr);
+    }
+    if (data != expected_data) {
+        if (get_progress() < 5) {
+            TST_LOG("ROM Read Mismatch: 0x%08X expected 0x%04X got 0x%04X", addr, expected_data, data);
+        }
+        rc = 1;
     }
 
     // Stop driving GPIOs and step a bit, as it isn't realistic to have the
@@ -318,11 +311,6 @@ static int test_set(uint8_t set_index) {
 
             // Get the ROM size, and halve it for 16-bit mode, to use word addresses
             uint32_t rom_size = get_rom_image_size(set_index, rom_index);
-            if (rom_type == CHIP_TYPE_23QL384) {
-                // Round up to 64KB (from 48KB) and, in check_rom_read, deal
-                // with the fact that the ROM shouldn't serve about 48KB.
-                rom_size = 65536;
-            }
             uint32_t iter_count = (rom_type == CHIP_TYPE_27C400 && pass_bit_mode == 16)
                 ? rom_size / 2
                 : rom_size;

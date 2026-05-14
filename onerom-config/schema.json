@@ -320,14 +320,14 @@
                     "const": "28C256"
                 },
                 {
-                    "description": "A composite ROM type, serving a combined 23256 and 23128 for the Sinclair QL, with a single configured CS line and is de-selected when A14 & A15 are both high - 49152 bytes, 28-pin package",
-                    "type": "string",
-                    "const": "23QL384"
-                },
-                {
                     "description": "64KB mask ROM with 2 configurable CS lines - 65536 bytes, 28-pin package",
                     "type": "string",
                     "const": "23512"
+                },
+                {
+                    "description": "A composite ROM type, serving two combined 23256s for the Sinclair QL, with a single configured CS line at pin 22, and A15 at pin 20 instead of pin 1 - 65536 bytes, 28-pin package",
+                    "type": "string",
+                    "const": "23QL512"
                 },
                 {
                     "description": "64KB EPROM with fixed active-low CE/OE - 65536 bytes, 28-pin package",

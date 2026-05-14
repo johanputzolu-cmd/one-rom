@@ -4892,7 +4892,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onerom-cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "base64 0.22.1",
  "built",
@@ -4925,7 +4925,7 @@ dependencies = [
 
 [[package]]
 name = "onerom-config"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "schemars",
  "serde",
@@ -4958,7 +4958,7 @@ dependencies = [
 
 [[package]]
 name = "onerom-fw"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -4978,7 +4978,7 @@ dependencies = [
 
 [[package]]
 name = "onerom-gen"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "onerom-config",
  "schemars",
@@ -6464,7 +6464,7 @@ dependencies = [
 
 [[package]]
 name = "sdrr-fw-parser"
-version = "0.6.11"
+version = "0.6.12"
 dependencies = [
  "airfrog-rpc",
  "deku 0.19.1",
@@ -6478,7 +6478,7 @@ dependencies = [
 
 [[package]]
 name = "sdrr-gen"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6494,7 +6494,7 @@ dependencies = [
 
 [[package]]
 name = "sdrr-info"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "anyhow",
  "chrono",

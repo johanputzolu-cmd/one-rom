@@ -922,7 +922,7 @@ void check_config(
 
         // Check that image size is either 64KB or 256KB
         uint32_t img_size = set->size;
-        if ((img_size != 64 * 1024) && (img_size != 256 * 1024)) {
+        if ((img_size != 64 * 1024) && (img_size != 128 * 1024) && (img_size != 256 * 1024)) {
             ERR("28-pin ROM image incorrect size 0x%08X", img_size);
             failed = 1;
         }
