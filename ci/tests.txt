@@ -176,7 +176,7 @@ fire-2704-28:HW_REV=fire-28-a,MCU=rp2350,ROM_CONFIGS="file=images/test/rand_8192
 fire-2708-28:HW_REV=fire-28-a,MCU=rp2350,ROM_CONFIGS="file=images/test/rand_8192.rom,trunc,type=2708"
 fire-2716-28:HW_REV=fire-28-a,MCU=rp2350,ROM_CONFIGS="file=images/test/rand_8192.rom,trunc,type=2716"
 fire-2732-28:HW_REV=fire-28-a,MCU=rp2350,ROM_CONFIGS="file=images/test/rand_8192.rom,trunc,type=2732"
-fire-23ql512-28:HW_REV=fire-28-a,MCU=rp2350,ROM_CONFIGS="file=images/test/rand_65536.rom,trunc,type=23QL512,cs1=1"
+fire-23ql512-28:HW_REV=fire-28-a,MCU=rp2350,ROM_CONFIGS="file=images/test/rand_65536.rom,type=23QL512,cs1=1"
 
 # Test ice-28-a PCB revision (28 pin ROM support, prototype only)
 # Ice tests are broken - it's probaby a test script issue, but we have deprecated ice-28-a boards anyway
