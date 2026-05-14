@@ -2,7 +2,7 @@
 
 All notables changes between versions are documented in this file.
 
-## v0.6.11 - 2026-??-??
+## v0.6.11 - 2026-05-14
 
 Changed:
 - Type 23QL384 ROM type has been replaced with 23QL512 (48KB->64KB) as the Sinclair QL supports up to 64KB ROMs.  When flashing a 48KB ROM (for example a Minerva ROM), use the additional slot option `size=pad` to pad a 48KB ROM to a 64KB one. 
