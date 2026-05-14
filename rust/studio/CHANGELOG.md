@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.20 - 2026-??-??
+## v0.1.20 - 2026-05-14
 
 - Moved 23QL384 support to a 23QL512 type.
 
