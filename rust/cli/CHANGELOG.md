@@ -1,5 +1,9 @@
 # CLI Changelog
 
+## v0.1.6 - 2026-??-??
+
+- Added 27C100 type as synonym of 27C301/27C1000
+
 ## v0.1.6 - 2026-05-14
 
 - Moved 23QL384 support to a 23QL512 type.
