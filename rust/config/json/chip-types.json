@@ -1117,7 +1117,8 @@
             "function": "ROM",
             "supported": "0.6.6",
             "aliases": [
-                "27C1000"
+                "27C1000",
+                "27C100"
             ],
             "bit_modes": [8],
             "pins": 32,

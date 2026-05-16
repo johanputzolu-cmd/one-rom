@@ -1,7 +1,6 @@
 "Reference","Qty","Value","DNP","Exclude from BOM","Exclude from Board","Footprint","Datasheet","LCSC"
-"C1,C2,C3,C7,C13,C15","6","4.7uF","","","","Capacitor_SMD:C_0402_1005Metric","~","C23733"
+"C1,C2,C3,C7,C13,C15,C16,C17","8","4.7uF","","","","Capacitor_SMD:C_0402_1005Metric","~","C23733"
 "C4,C5,C6,C8,C9,C10,C11,C12,C14,C20,C21,C22","12","0.1uF","","","","Capacitor_SMD:C_0402_1005Metric","~","C1525"
-"C16,C17","2","4.7uF","","","","RP2350_60QFN_minimal:C_0402_1005Metric_small_pads","~","C23733"
 "C18,C19","2","15pF","","","","Capacitor_SMD:C_0402_1005Metric","~","C1548"
 "D1","1","LED_Small","","","","LED_SMD:LED_0402_1005Metric","~","C25503345"
 "D2,D3","2","1N5819WS","","","","Diode_SMD:D_SOD-323","","C191023"

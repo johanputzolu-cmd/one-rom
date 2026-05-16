@@ -2,6 +2,11 @@
 
 All notables changes between versions are documented in this file.
 
+## v0.6.12 - 2026-??-??
+
+Added
+- 27C100 as synonym of 27C301/27C1000.
+
 ## v0.6.11 - 2026-05-14
 
 Changed:
