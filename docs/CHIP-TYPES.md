@@ -77,9 +77,9 @@ There are also some other inconsistencies between types:
 
 | Chip Type | Aliases | Size | Address Lines | Control Lines | Programming | Supported |
 |-----------|---------|------|---------------|---------------|-------------|-----------|
-| 27C010 | 27C1001, 27C1000A, SST39SF010 | 128KB | 17 (A0-A16) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
+| 27C010 | 27C1001, 27C1000A, 29F010, 39SF010, SST39SF010 | 128KB | 17 (A0-A16) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
 | 27C301 | 27C1000, 27C100 | 128KB | 17 (A0-A16) | /CE (pin 22), /OE (pin 2) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
-| 27C020 | 27C2001, SST39SF020 | 256KB | 18 (A0-A17) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
+| 27C020 | 27C2001, 39SF020, 29F020, SST39SF020 | 256KB | 18 (A0-A17) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
 | 27C040 | 27C4001, HN62404, HN62424 | 512KB | 19 (A0-A18) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 22 (Acts as /OE) | ✓ |
 | 27C080 | 27C801 | 1024KB | 20 (A0-A19) | /CE (pin 22), /OE (pin 24) | VPP: pin 24 (Acts as /OE); /PGM: pin 22 (Acts as /OE) | ✓ |
 
