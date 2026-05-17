@@ -1192,6 +1192,8 @@
             "aliases": [
                 "27C1001",
                 "27C1000A",
+                "29F010",
+                "39SF010",
                 "SST39SF010"
             ],
             "bit_modes": [8],
@@ -1265,6 +1267,8 @@
             "supported": "0.6.6",
             "aliases": [
                 "27C2001",
+                "39SF020",
+                "29F020",
                 "SST39SF020"
             ],
             "bit_modes": [8],
@@ -1413,6 +1417,8 @@
             "description": "512KB flash with fixed active-low CE/OE and different pinout to 27C040",
             "function": "ROM",
             "aliases": [
+                "39SF040",
+                "29C040"
             ],
             "bit_modes": [8],
             "pins": 32,

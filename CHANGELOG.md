@@ -6,6 +6,7 @@ All notables changes between versions are documented in this file.
 
 Added
 - 27C100 as synonym of 27C301/27C1000.
+- 39SF0x0 and 29x0x0 as synonyms of SST39SF0x0.
 
 ## v0.6.11 - 2026-05-14
 
