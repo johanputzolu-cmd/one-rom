@@ -46,7 +46,7 @@ SRC := src/usb_descriptors.c src/usb_picobootx.c src/usb_rom.c src/usb_led.c src
 CFLAGS := -mcpu=cortex-m33 -mthumb -mfloat-abi=hard -mfpu=fpv5-sp-d16 \
           -O2 -Wall -Wextra -Werror \
           -ffunction-sections -fdata-sections \
-          -MMD -MP \
+          -MMD -MP -g \
 		  -DMAJOR_VERSION=$(MAJOR_VERSION) -DMINOR_VERSION=$(MINOR_VERSION) \
 		  -DPATCH_VERSION=$(PATCH_VERSION) -DBUILD_VERSION=$(BUILD_VERSION) \
           $(SDRR_INCLUDE) $(SEGGER_INCLUDE) $(ORA_INCLUDE) $(PLUGIN_INCLUDE) \
