@@ -1,8 +1,9 @@
 # CLI Changelog
 
-## v0.1.6 - 2026-??-??
+## v0.1.7 - 2026-05-18
 
 - Added 27C100 type as synonym of 27C301/27C1000
+- Added `onerom image swap-bytes` to swap bytes in a 16-bit ROM image file.
 
 ## v0.1.6 - 2026-05-14
 

@@ -11,6 +11,7 @@
 //!   onerom inspect <subcommand>  - Read-only One ROM state and information
 //!   onerom control <subcommand>  - Transient One ROM actions
 //!   onerom update <subcommand>   - Persistent One ROM modifications
+//!   onerom image <subcommand>    - ROM image file manipulation
 //!
 //! The --serial option is global and can be specified at any level to select
 //! a specific One ROM when multiple are connected.
@@ -24,6 +25,7 @@
 
 pub mod control;
 pub mod firmware;
+pub mod image;
 pub mod inspect;
 pub mod plugin;
 pub mod program;
@@ -48,6 +50,7 @@ use firmware::{
     FirmwareArgs, FirmwareBuildArgs, FirmwareChipsArgs, FirmwareCommands, FirmwareDownloadArgs,
     FirmwareInspectArgs, FirmwareReleasesArgs,
 };
+use image::{ImageArgs, ImageCommands, ImageSwapBytesArgs};
 use inspect::{
     InspectArgs, InspectCommands, InspectGpioArgs, InspectImageArgs, InspectInfoArgs,
     InspectPeekArgs, InspectPeekCommands, InspectPeekLiveArgs, InspectPeekMemoryArgs,
@@ -309,7 +312,7 @@ pub enum Commands {
     /// 'firmware' command.
     Program(ProgramArgs),
 
-    /// Read-only inspection of a connected One .
+    /// Read-only inspection of a connected One ROM.
     #[command(
         subcommand_value_name = "COMMAND",
         subcommand_help_heading = "Commands"
@@ -335,6 +338,20 @@ pub enum Commands {
         subcommand_help_heading = "Commands"
     )]
     Update(UpdateArgs),
+
+    /// Manipulate ROM image files.
+    ///
+    /// File-based operations for preparing and transforming ROM binary images
+    /// before programming. No device connection required.
+    ///
+    /// Example:
+    ///
+    ///   onerom image swap-bytes --input kick.bin --output kick-swapped.bin
+    #[command(
+        subcommand_value_name = "COMMAND",
+        subcommand_help_heading = "Commands"
+    )]
+    Image(ImageArgs),
 
     /// Read data from One ROM's live ROM image.
     ///

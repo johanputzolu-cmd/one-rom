@@ -11,6 +11,7 @@ use log::{debug, error, info, trace, warn};
 mod args;
 mod control;
 mod firmware;
+mod image;
 mod inspect;
 mod plugin;
 mod program;
@@ -22,6 +23,7 @@ use args::Cli;
 use args::Commands;
 use args::control::{ControlCommands, ControlLedCommands, ControlPokeCommands};
 use args::firmware::FirmwareCommands;
+use args::image::ImageCommands;
 use args::inspect::{InspectCommands, InspectPeekCommands};
 use args::update::UpdateCommands;
 
@@ -90,6 +92,9 @@ async fn sub_main() -> Result<(), Error> {
             UpdateCommands::Slot(args) => update::cmd_slot(&options, args).await,
             UpdateCommands::Commit(args) => update::cmd_commit(&options, args).await,
             UpdateCommands::Otp(args) => update::cmd_otp(&options, args).await,
+        },
+        Commands::Image(args) => match &args.command {
+            ImageCommands::SwapBytes(args) => image::cmd_swap_bytes(&options, args).await,
         },
         Commands::Peek(args) => inspect::cmd_peek_live(&options, args).await,
         Commands::Poke(args) => control::cmd_poke_live(&options, args).await,
