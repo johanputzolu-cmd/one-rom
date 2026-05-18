@@ -4,7 +4,7 @@ This directory contains the source code for the One ROM Lens, a tool which runs 
 
 ## Pre-requisites
 
-To [build](#building) and run One ROM Lens, you need to build the One ROM firmware.  This requires either a Linux or macOS host, and the dependencies listed in the [INSTALL.md](../INSTALL.md) instructions, including C build tools, the Rust toolchain and python3.
+To [build](#building) and run One ROM Lens, you need to build the One ROM firmware.  This requires either a Linux or macOS host, and the dependencies listed in the [INSTALL.md](/INSTALL.md) instructions, including C build tools, the Rust toolchain and python3.
 
 ## Building
 
