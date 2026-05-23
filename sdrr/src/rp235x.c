@@ -676,7 +676,7 @@ void disable_sel_pins(void) {
         uint8_t pin = sdrr_info.pins->sel[ii];
         if (pin < MAX_USED_GPIOS) {
             // Disable pulls
-            GPIO_PAD(pin) = ~(PAD_PU | PAD_PD);
+            GPIO_PAD(pin) &= ~(PAD_PU | PAD_PD);
 
             SYSCFG_DBGFORCE &= ~SYSCFG_DBGFORCE_ATTACH_BIT;
 
@@ -684,6 +684,7 @@ void disable_sel_pins(void) {
                 (pin == sdrr_info.pins->swdio_sel)) {
                 DEBUG("Restore pin %d", pin);
 
+                GPIO_CTRL(ii) = GPIO_CTRL_RESET;
                 // Use measured value to restore function
                 if (pin == sdrr_info.pins->swclk_sel) {
                     GPIO_PAD(SWCLK_PAD) = 0x5A;
