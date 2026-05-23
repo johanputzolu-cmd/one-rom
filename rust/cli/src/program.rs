@@ -246,7 +246,6 @@ pub async fn cmd_program(
                 return Err(Error::NoDevice);
             }
         }
-            
 
         if !args.batch {
             break;

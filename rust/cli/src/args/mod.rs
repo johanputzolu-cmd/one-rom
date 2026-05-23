@@ -412,4 +412,16 @@ pub enum Commands {
     /// Displays plugins from the release manifest with version and minimum
     /// firmware version information.
     Plugin(PluginArgs),
+
+    /// List supported chip types.
+    ///
+    /// Displays the chip types supported by a specific board, or all chip types
+    /// grouped by pin count.
+    ///
+    /// Examples:
+    ///
+    ///   onerom firmware chips --board fire-24-e
+    ///
+    ///   onerom firmware chips --all
+    Chips(FirmwareChipsArgs),
 }

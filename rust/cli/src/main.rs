@@ -99,5 +99,6 @@ async fn sub_main() -> Result<(), Error> {
         Commands::Peek(args) => inspect::cmd_peek_live(&options, args).await,
         Commands::Poke(args) => control::cmd_poke_live(&options, args).await,
         Commands::Reboot(args) => control::cmd_reboot(&options, args).await,
+        Commands::Chips(args) => firmware::cmd_chips(&options, args).await,
     }
 }

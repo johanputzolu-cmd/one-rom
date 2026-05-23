@@ -200,7 +200,9 @@ pub enum Error {
     #[error("Plugin '{0}' has unrecognised type '{1}' in manifest")]
     PluginUnknownManifestType(String, String),
 
-    #[error("ROM image '{0}' has an odd number of bytes ({1}).\n  Byte swapping requires an even-length input file.")]
+    #[error(
+        "ROM image '{0}' has an odd number of bytes ({1}).\n  Byte swapping requires an even-length input file."
+    )]
     OddLengthImage(String, usize),
 }
 
