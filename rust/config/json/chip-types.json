@@ -1616,6 +1616,10 @@
             "description": "0.5MB EPROM with fixed active-low CE/OE",
             "function": "ROM",
             "supported": "0.6.5",
+            "aliases": [
+                "AT27C400",
+                "M27C400"
+            ],
             "bit_modes": [8, 16],
             "pins": 40,
             "size": 524288,
