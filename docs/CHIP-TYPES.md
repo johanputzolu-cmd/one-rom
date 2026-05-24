@@ -81,14 +81,14 @@ There are also some other inconsistencies between types:
 | 27C010 | 27C1001, 27C1000A, 29F010, 39SF010, SST39SF010 | 128KB | 17 (A0-A16) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
 | 27C301 | 27C1000, 27C100 | 128KB | 17 (A0-A16) | /CE (pin 22), /OE (pin 2) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
 | 27C020 | 27C2001, 39SF020, 29F020, SST39SF020 | 256KB | 18 (A0-A17) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 31 (x) | ✓ |
-| 27C040 | 27C4001, HN62404, HN62424 | 512KB | 19 (A0-A18) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 22 (Acts as /OE) | ✓ |
+| 27C040 | 27C4001 | 512KB | 19 (A0-A18) | /CE (pin 22), /OE (pin 24) | VPP: pin 1 (x); /PGM: pin 22 (Acts as /OE) | ✓ |
 | 27C080 | 27C801 | 1024KB | 20 (A0-A19) | /CE (pin 22), /OE (pin 24) | VPP: pin 24 (Acts as /OE); /PGM: pin 22 (Acts as /OE) | ✓ |
 
 ## 40-pin EPROM Family (27xx)
 
 | Chip Type | Aliases | Size | Address Lines | Control Lines | Programming | Supported |
 |-----------|---------|------|---------------|---------------|-------------|-----------|
-| 27C400 | AT27C400, M27C400 | 512KB | 19 (A0-A18) | /BYTE (pin 31), /CE (pin 10), /OE (pin 12) | VPP: pin 31 (word_size); /PGM: pin 10 (Acts as /OE) | ✓ |
+| 27C400 | AT27C400, M27C400, 23C4100, MX23C4100, TCS534200, 27C4100, MX27C4100, HN62404, HN62424, MB834200 | 512KB | 19 (A0-A18) | /BYTE (pin 31), /CE (pin 10), /OE (pin 12) | VPP: pin 31 (word_size); /PGM: pin 10 (Acts as /OE) | ✓ |
 
 ## 24-pin EEPROM Family (28Cxx)
 
