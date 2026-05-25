@@ -155,7 +155,9 @@
             "function": "ROM",
             "supported": "0.4.4",
             "aliases": [
-                "4764"
+                "4764",
+                "MCM68764",
+                "MCM68A764"
             ],
             "bit_modes": [8],
             "pins": 24,
