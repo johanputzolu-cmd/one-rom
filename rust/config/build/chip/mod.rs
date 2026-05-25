@@ -843,7 +843,7 @@ fn generate_aliases_method(config: &ChipTypesConfig) -> String {
     code.push_str("    /// use onerom_config::chip::ChipType;\n");
     code.push_str("    ///\n");
     code.push_str("    /// assert_eq!(ChipType::Chip6116.aliases(), &[\"6116\", \"2016\"]);\n");
-    code.push_str("    /// assert_eq!(ChipType::Chip2364.aliases(), &[\"2364\", \"4764\"]);\n");
+    code.push_str("    /// assert_eq!(ChipType::Chip2364.aliases(), &[\"2364\", \"4764\", \"MCM68764\", \"MCM68A764\"]);\n");
     code.push_str("    /// ```\n");
     code.push_str("    pub const fn aliases(&self) -> &'static [&'static str] {\n");
     code.push_str("        match self {\n");
