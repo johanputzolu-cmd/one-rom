@@ -157,7 +157,9 @@
             "aliases": [
                 "4764",
                 "MCM68764",
-                "MCM68A764"
+                "MCM68A764",
+                "MCM68364",
+                "MCM68A364"
             ],
             "bit_modes": [8],
             "pins": 24,
