@@ -1,9 +1,9 @@
 # Changelog
 
-## v0.1.21 - 2026-??-??
+## v0.1.21 - 2026-05-26
 
-- Added 27C100 type as synonym of 27C301/27C1000
 - Re-added 23QL384 ROM type
+- More ROM aliases
 
 ## v0.1.20 - 2026-05-14
 

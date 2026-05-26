@@ -1,10 +1,11 @@
 # CLI Changelog
 
-## v0.1.8 - 2026-??-??
+## v0.1.8 - 2026-05-26
 
 - Re-added 23QL384.
 - Add `onerom chips` to show supported chip types and their aliases.
 - Fixed `onerom program --scan-slots`, to correctly re-query One ROM after programming.
+- More ROM type aliases.
 
 ## v0.1.7 - 2026-05-18
 

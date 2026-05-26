@@ -2,13 +2,14 @@
 
 All notables changes between versions are documented in this file.
 
-## v0.6.12 - 2026-??-??
+## v0.6.12 - 2026-05-26
 
 Added
 - 27C100 as synonym of 27C301/27C1000.
 - 39SF0x0 and 29x0x0 as synonyms of SST39SF0x0.
 - Re-added 23QL384 as a new composite ROM type.  This serves both a 23256 and a 23128 ROM, as used in the Sinclair QL, with a single configured CS line (use active high for the Sinclair QL) and it is de-selected when A14 & A15 are both high.  It is required, in addition to the 23QL512, where other peripherals supply the top 16KB of the ROM space.  This ROm type may be useful for other systems.
-- More aliases of 27C400 ROM type.  Also corrected HN62404/24 as aliases of the 27C400, not the 27C040.
+- More aliases of th 27C400 ROM type.  Also corrected HN62404/24 as aliases of the 27C400, not the 27C040.
+- More aliases of 2364 ROM type.
 
 ## v0.6.11 - 2026-05-14
 
