@@ -1,3 +1,4 @@
+
 name: CI Build
 
 permissions:
@@ -20,6 +21,7 @@ on:
       - '!.github/workflows/release.yml'
       - '!**.md'
       - '!docs/**'
+
   pull_request:
     branches: [ main ]
     paths:
@@ -39,16 +41,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y dfu-util gcc-arm-none-eabi jq libcurl4-openssl-dev libjson-c-dev libzip-dev make
-        
+        sudo apt-get install -y \
+          dfu-util \
+          gcc-arm-none-eabi \
+          jq \
+          libcurl4-openssl-dev \
+          libjson-c-dev \
+          libzip-dev \
+          make
+
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
@@ -74,7 +83,7 @@ jobs:
       run: |
         export TOOLCHAIN=/usr/bin
         ci/test-pios.sh
-      
+
     - name: Build firmware for all image configs
       run: |
         export TOOLCHAIN=/usr/bin
@@ -83,8 +92,11 @@ jobs:
     - name: Build plugins
       run: |
         export TOOLCHAIN=/usr/bin
+
         make clean
+
         HW_REV=fire-28-a MCU=rp2350 ROM_CONFIGS= EXCLUDE_METADATA=1 make
+
         make -C plugins/system/usb
         make -C plugins/user/activity
         make -C plugins/user/blink
@@ -95,3 +107,14 @@ jobs:
       run: |
         export TOOLCHAIN=/usr/bin
         ci/rust-tools.sh
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: onerom-builds
+        path: |
+          build/**/*.uf2
+          build/**/*.bin
+          plugins/**/build/*.bin
+          plugins/**/build/*.elf
+
