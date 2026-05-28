@@ -84,7 +84,7 @@ jobs:
       run: |
         export TOOLCHAIN=/usr/bin
         make clean
-        HW_REV=fire-24-e MCU=rp2350 ROM_CONFIGS= EXCLUDE_METADATA=1 make
+        HW_REV=fire-28-a MCU=rp2350 ROM_CONFIGS= EXCLUDE_METADATA=1 make
         make -C plugins/system/usb
         make -C plugins/user/activity
         make -C plugins/user/blink
